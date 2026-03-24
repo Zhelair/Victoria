@@ -175,18 +175,18 @@ body {
 /* ─── Pixel Art Animations ───────────────────────────────────────── */
 @keyframes pixelFloat {
   0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-6px); }
+  50% { transform: translateY(-10px); }
 }
 
 @keyframes pixelBounce {
   0%, 100% { transform: translateY(0) scaleY(1); }
-  40% { transform: translateY(-12px) scaleY(1.05); }
-  60% { transform: translateY(-8px) scaleY(0.98); }
+  40% { transform: translateY(-16px) scaleY(1.08); }
+  60% { transform: translateY(-10px) scaleY(0.96); }
 }
 
 @keyframes pixelWaddle {
-  0%, 100% { transform: rotate(-3deg); }
-  50% { transform: rotate(3deg); }
+  0%, 100% { transform: rotate(-5deg) translateX(-2px); }
+  50% { transform: rotate(5deg) translateX(2px); }
 }
 
 @keyframes pixelSpin {
