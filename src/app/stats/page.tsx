@@ -10,21 +10,21 @@ import type { LogEntry, LogCategory } from '@/types';
 
 // Recharts must be loaded client-side only
 const LineChart = dynamic(
-  () => import('recharts').then((m) => m.LineChart),
+  () => import('recharts').then((m) => m.LineChart as any),
   { ssr: false }
 );
 const BarChart = dynamic(
-  () => import('recharts').then((m) => m.BarChart),
+  () => import('recharts').then((m) => m.BarChart as any),
   { ssr: false }
 );
-const Line = dynamic(() => import('recharts').then((m) => m.Line), { ssr: false });
-const Bar = dynamic(() => import('recharts').then((m) => m.Bar), { ssr: false });
-const XAxis = dynamic(() => import('recharts').then((m) => m.XAxis), { ssr: false });
-const YAxis = dynamic(() => import('recharts').then((m) => m.YAxis), { ssr: false });
-const CartesianGrid = dynamic(() => import('recharts').then((m) => m.CartesianGrid), { ssr: false });
-const Tooltip = dynamic(() => import('recharts').then((m) => m.Tooltip), { ssr: false });
+const Line = dynamic(() => import('recharts').then((m) => m.Line as any), { ssr: false });
+const Bar = dynamic(() => import('recharts').then((m) => m.Bar as any), { ssr: false });
+const XAxis = dynamic(() => import('recharts').then((m) => m.XAxis as any), { ssr: false });
+const YAxis = dynamic(() => import('recharts').then((m) => m.YAxis as any), { ssr: false });
+const CartesianGrid = dynamic(() => import('recharts').then((m) => m.CartesianGrid as any), { ssr: false });
+const Tooltip = dynamic(() => import('recharts').then((m) => m.Tooltip as any), { ssr: false });
 const ResponsiveContainer = dynamic(
-  () => import('recharts').then((m) => m.ResponsiveContainer),
+  () => import('recharts').then((m) => m.ResponsiveContainer as any),
   { ssr: false }
 );
 
