@@ -16,6 +16,9 @@ import {
 } from '@/types';
 
 interface VictoriaState {
+  // Hydration flag
+  _hasHydrated: boolean;
+
   // Settings
   settings: AppSettings;
   updateSettings: (partial: Partial<AppSettings>) => void;
@@ -67,6 +70,8 @@ interface VictoriaState {
 export const useVictoriaStore = create<VictoriaState>()(
   persist(
     (set, get) => ({
+      _hasHydrated: false,
+
       settings: DEFAULT_SETTINGS,
       updateSettings: (partial) =>
         set((s) => ({ settings: { ...s.settings, ...partial } })),
@@ -126,6 +131,9 @@ export const useVictoriaStore = create<VictoriaState>()(
     {
       name: 'victoria-store',
       storage: createJSONStorage(() => localStorage),
+      onRehydrateStorage: () => () => {
+        useVictoriaStore.setState({ _hasHydrated: true });
+      },
       partialize: (state) => ({
         settings: state.settings,
         moodScore: state.moodScore,

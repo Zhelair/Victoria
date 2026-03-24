@@ -241,7 +241,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tier: 'free',
   onboardingDone: false,
   notificationsEnabled: false,
-  voiceEnabled: true,
+  voiceEnabled: false,
   voiceRate: 1,
   voicePitch: 1.1,
   selectedVoiceName: undefined,

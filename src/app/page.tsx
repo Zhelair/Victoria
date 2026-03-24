@@ -34,16 +34,18 @@ export default function HomePage() {
   const router = useRouter();
   const { t } = useTranslation();
   const settings = useVictoriaStore((s) => s.settings);
+  const _hasHydrated = useVictoriaStore((s) => s._hasHydrated);
   const moodScore = useVictoriaStore((s) => s.moodScore);
   const adjustMoodScore = useVictoriaStore((s) => s.adjustMoodScore);
   const todos = useVictoriaStore((s) => s.logCategories); // placeholder
   const streakDays = useVictoriaStore((s) => s.streakDays);
 
   useEffect(() => {
+    if (!_hasHydrated) return;
     if (!settings.onboardingDone) {
       router.replace('/onboarding');
     }
-  }, [settings.onboardingDone, router]);
+  }, [_hasHydrated, settings.onboardingDone, router]);
 
   const hour = new Date().getHours();
   const greeting = getGreeting(hour);
@@ -71,7 +73,7 @@ export default function HomePage() {
     }
   };
 
-  if (!settings.onboardingDone) return null;
+  if (!_hasHydrated || !settings.onboardingDone) return null;
 
   return (
     <AppShell>
