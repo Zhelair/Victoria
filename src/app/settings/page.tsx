@@ -30,6 +30,7 @@ export default function SettingsPage() {
   const [importDone, setImportDone] = useState(false);
   const [saveSlots, setSaveSlots] = useState<(SaveSlot | null)[]>([null, null, null]);
   const [slotToDelete, setSlotToDelete] = useState<number | null>(null);
+  const [showClearChatsConfirm, setShowClearChatsConfirm] = useState(false);
 
   // Load voices
   useEffect(() => {
@@ -99,6 +100,11 @@ export default function SettingsPage() {
     await db.saveSlots.delete(slotNum);
     setSlotToDelete(null);
     await refreshSlots();
+  };
+
+  const handleClearChats = async () => {
+    await db.chatThreads.clear();
+    setShowClearChatsConfirm(false);
   };
 
   // Sync language with i18n
@@ -287,7 +293,7 @@ export default function SettingsPage() {
                       <span className="font-pixel text-[8px]">{t(`settings.characters.${mode}`)}</span>
                       {locked && (
                         <span className="font-pixel text-[6px]" style={{ color: 'var(--text-muted)' }}>
-                          🔒 Max
+                          🔒 Pro+
                         </span>
                       )}
                     </button>
@@ -612,6 +618,45 @@ export default function SettingsPage() {
                 </button>
               </SettingsSection>
 
+              {/* Clear chat history */}
+              <SettingsSection title="Chat History">
+                {!showClearChatsConfirm ? (
+                  <button
+                    onClick={() => setShowClearChatsConfirm(true)}
+                    className="w-full py-3 rounded-xl font-pixel text-[8px] transition-all"
+                    style={{
+                      backgroundColor: 'var(--shell)',
+                      color: '#f59e0b',
+                      border: '1px solid #f59e0b',
+                    }}
+                  >
+                    Clear All Chats
+                  </button>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs" style={{ color: '#f59e0b' }}>
+                      Delete all chat threads? This cannot be undone.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleClearChats}
+                        className="flex-1 py-2 rounded-xl font-pixel text-[8px] text-white"
+                        style={{ backgroundColor: '#f59e0b' }}
+                      >
+                        {t('common.delete')}
+                      </button>
+                      <button
+                        onClick={() => setShowClearChatsConfirm(false)}
+                        className="px-4 py-2 rounded-xl font-pixel text-[8px]"
+                        style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+                      >
+                        {t('common.cancel')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </SettingsSection>
+
               {/* Delete all data */}
               <SettingsSection title={t('settings.deleteAllData')}>
                 {!showDeleteConfirm ? (
@@ -679,13 +724,12 @@ export default function SettingsPage() {
                   </span>
                   <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                     {tier === 'free' && t('tiers.proFeatures')}
-                    {tier === 'pro' && t('tiers.maxFeatures')}
-                    {tier === 'max' && 'You have full access to all features!'}
+                    {(tier === 'pro' || tier === 'max') && 'You have full access to all features!'}
                   </p>
                 </div>
               </SettingsSection>
 
-              {tier !== 'max' && (
+              {tier === 'free' && (
                 <SettingsSection title={t('tiers.enterPassphrase')}>
                   <input
                     type="text"
