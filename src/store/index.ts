@@ -65,6 +65,16 @@ interface VictoriaState {
 
   // Computed
   getMoodTier: () => MoodTier;
+
+  // Mini-game daily usage
+  miniGameUsage: {
+    date: string;
+    feed: number;
+    play: number;
+    cleaned: boolean;
+    slept: boolean;
+  };
+  recordMiniGame: (game: 'feed' | 'play' | 'clean' | 'sleep') => { allowed: boolean; delta: number };
 }
 
 export const useVictoriaStore = create<VictoriaState>()(
@@ -127,6 +137,27 @@ export const useVictoriaStore = create<VictoriaState>()(
       setCheckinDoneToday: (v) => set({ checkinDoneToday: v }),
 
       getMoodTier: () => getMoodTier(get().moodScore),
+
+      miniGameUsage: { date: '', feed: 0, play: 0, cleaned: false, slept: false },
+      recordMiniGame: (game) => {
+        const today = new Date().toISOString().split('T')[0];
+        const prev = get().miniGameUsage;
+        const u = prev.date === today ? prev : { date: today, feed: 0, play: 0, cleaned: false, slept: false };
+        const newU = { ...u };
+        let delta = 0;
+        let allowed = false;
+        if (game === 'feed' && u.feed < 3) { allowed = true; delta = 2; newU.feed++; }
+        else if (game === 'play' && u.play < 3) { allowed = true; delta = 2; newU.play++; }
+        else if (game === 'clean' && !u.cleaned) { allowed = true; delta = 3; newU.cleaned = true; }
+        else if (game === 'sleep' && !u.slept) { allowed = true; newU.slept = true; }
+        if (allowed) {
+          set((s) => ({
+            miniGameUsage: newU,
+            moodScore: delta > 0 ? Math.max(0, Math.min(100, s.moodScore + delta)) : s.moodScore,
+          }));
+        }
+        return { allowed, delta };
+      },
     }),
     {
       name: 'victoria-store',
@@ -143,6 +174,7 @@ export const useVictoriaStore = create<VictoriaState>()(
         streakDays: state.streakDays,
         totalDays: state.totalDays,
         checkinDoneToday: state.checkinDoneToday,
+        miniGameUsage: state.miniGameUsage,
       }),
     }
   )
