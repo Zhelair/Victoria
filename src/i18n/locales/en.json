@@ -144,7 +144,7 @@
       "girl": "Girl",
       "cat": "Cat"
     },
-    "characterLocked": "Cat & Girl require Max plan",
+    "characterLocked": "Cat & Girl require Pro or Max",
     "animations": "Animations",
     "animationLevels": {
       "full": "Full",
