@@ -39,6 +39,11 @@ export class VictoriaDB extends Dexie {
       scoringRules: 'id, type, category, enabled',
       logCategories: 'id, enabled',
     });
+
+    // v2: add createdAt index to todos so orderBy('createdAt') works
+    this.version(2).stores({
+      todos: 'id, done, sphere, dueDate, createdAt',
+    });
   }
 }
 
