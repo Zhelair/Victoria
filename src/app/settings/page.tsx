@@ -7,7 +7,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { db } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
-import type { ScoringRule, Theme, Language, CharacterMode, PersonalityMode } from '@/types';
+import type { ScoringRule, Theme, Language, CharacterMode, PersonalityMode, SaveSlot, AppSnapshot } from '@/types';
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -27,6 +27,9 @@ export default function SettingsPage() {
   const [passphraseInput, setPassphraseInput] = useState('');
   const [passphraseError, setPassphraseError] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
+  const [importDone, setImportDone] = useState(false);
+  const [saveSlots, setSaveSlots] = useState<(SaveSlot | null)[]>([null, null, null]);
+  const [slotToDelete, setSlotToDelete] = useState<number | null>(null);
 
   // Load voices
   useEffect(() => {
@@ -35,6 +38,68 @@ export default function SettingsPage() {
     window.speechSynthesis?.addEventListener('voiceschanged', loadVoices);
     return () => window.speechSynthesis?.removeEventListener('voiceschanged', loadVoices);
   }, []);
+
+  // Load save slots when Data section is active
+  useEffect(() => {
+    if (activeSection !== 'data') return;
+    db.saveSlots.toArray().then((slots) => {
+      const map: (SaveSlot | null)[] = [null, null, null];
+      slots.forEach((s) => { map[s.slot - 1] = s; });
+      setSaveSlots(map);
+    });
+  }, [activeSection]);
+
+  const refreshSlots = async () => {
+    const slots = await db.saveSlots.toArray();
+    const map: (SaveSlot | null)[] = [null, null, null];
+    slots.forEach((s) => { map[s.slot - 1] = s; });
+    setSaveSlots(map);
+  };
+
+  const handleSaveToSlot = async (slotNum: 1 | 2 | 3) => {
+    const state = useVictoriaStore.getState();
+    const snapshot: AppSnapshot = {
+      settings: state.settings,
+      scoringRules: state.scoringRules,
+      logCategories: state.logCategories,
+      moodScore: state.moodScore,
+      streakDays: state.streakDays,
+      totalDays: state.totalDays,
+      goals: await db.goals.toArray(),
+      todos: await db.todos.toArray(),
+      fitnessPlan: await db.fitnessPlans.filter((p) => p.active).first(),
+    };
+    await db.saveSlots.put({
+      slot: slotNum,
+      label: `Save ${slotNum}`,
+      savedAt: Date.now(),
+      day: state.totalDays,
+      moodScore: state.moodScore,
+      data: snapshot,
+    });
+    await refreshSlots();
+  };
+
+  const handleLoadSlot = async (slot: SaveSlot) => {
+    const { data } = slot;
+    useVictoriaStore.setState({
+      settings: data.settings,
+      scoringRules: data.scoringRules,
+      logCategories: data.logCategories,
+      moodScore: data.moodScore,
+      streakDays: data.streakDays,
+      totalDays: data.totalDays,
+    });
+    if (data.goals?.length) await db.goals.bulkPut(data.goals);
+    if (data.todos?.length) await db.todos.bulkPut(data.todos);
+    if (data.fitnessPlan) await db.fitnessPlans.put(data.fitnessPlan);
+  };
+
+  const handleDeleteSlot = async (slotNum: number) => {
+    await db.saveSlots.delete(slotNum);
+    setSlotToDelete(null);
+    await refreshSlots();
+  };
 
   // Sync language with i18n
   const handleLanguageChange = (lang: Language) => {
@@ -89,7 +154,8 @@ export default function SettingsPage() {
         if (data.todos) await db.todos.bulkPut(data.todos);
         if (data.goals) await db.goals.bulkPut(data.goals);
         if (data.fitnessPlan) await db.fitnessPlans.put(data.fitnessPlan);
-        alert('Data imported successfully!');
+        setImportDone(true);
+        setTimeout(() => setImportDone(false), 6000);
       } catch {
         alert('Invalid backup file.');
       }
@@ -408,8 +474,87 @@ export default function SettingsPage() {
           {/* ─── Data ───────────────────────────────────────────────── */}
           {activeSection === 'data' && (
             <div className="space-y-4">
+              {/* Save Slots */}
+              <SettingsSection title={t('settings.saveSlots')}>
+                <div className="grid grid-cols-3 gap-2">
+                  {([1, 2, 3] as const).map((n) => {
+                    const slot = saveSlots[n - 1];
+                    return (
+                      <div
+                        key={n}
+                        className="flex flex-col gap-1.5 p-2 rounded-xl"
+                        style={{ backgroundColor: 'var(--shell)', border: '1px solid var(--border)' }}
+                      >
+                        <div className="text-center">
+                          <p className="font-pixel text-[7px]" style={{ color: 'var(--accent)' }}>
+                            {t('settings.slot', { n })}
+                          </p>
+                          <p className="font-pixel mt-0.5" style={{ fontSize: '5px', color: 'var(--text-muted)' }}>
+                            {slot ? `Day ${slot.day} · ${slot.moodScore}pts` : t('settings.emptySlot')}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleSaveToSlot(n)}
+                          className="w-full py-1 rounded-lg font-pixel text-[6px] text-white"
+                          style={{ backgroundColor: 'var(--accent)' }}
+                        >
+                          {t('settings.saveSlot')}
+                        </button>
+                        {slot && slotToDelete !== n && (
+                          <>
+                            <button
+                              onClick={() => handleLoadSlot(slot)}
+                              className="w-full py-1 rounded-lg font-pixel text-[6px]"
+                              style={{ backgroundColor: 'var(--shell-dark)', color: 'var(--text)' }}
+                            >
+                              {t('settings.loadSlot')}
+                            </button>
+                            <button
+                              onClick={() => setSlotToDelete(n)}
+                              className="w-full py-1 rounded-lg font-pixel text-[6px]"
+                              style={{ backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444' }}
+                            >
+                              {t('settings.deleteSlot')}
+                            </button>
+                          </>
+                        )}
+                        {slot && slotToDelete === n && (
+                          <div className="space-y-1">
+                            <p className="font-pixel text-center" style={{ fontSize: '5px', color: '#ef4444' }}>Sure?</p>
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => handleDeleteSlot(n)}
+                                className="flex-1 py-1 rounded-lg font-pixel text-[6px] text-white"
+                                style={{ backgroundColor: '#ef4444' }}
+                              >
+                                Yes
+                              </button>
+                              <button
+                                onClick={() => setSlotToDelete(null)}
+                                className="flex-1 py-1 rounded-lg font-pixel text-[6px]"
+                                style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+                              >
+                                No
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </SettingsSection>
+
               <SettingsSection title={t('settings.saveData')}>
                 <div className="space-y-2">
+                  {importDone && (
+                    <div
+                      className="p-3 rounded-xl font-pixel text-[7px] leading-relaxed"
+                      style={{ backgroundColor: '#22c55e20', border: '1px solid #22c55e', color: 'var(--text)' }}
+                    >
+                      ✓ Restored! {t('settings.importApiNote')}
+                    </div>
+                  )}
                   <button
                     onClick={handleExport}
                     className="w-full py-3 rounded-xl font-pixel text-[8px] transition-all active:scale-95"
