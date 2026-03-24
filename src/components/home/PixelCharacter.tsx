@@ -14,9 +14,9 @@ interface PixelCharacterProps {
 
 // ─── Pixel Art using CSS (pure CSS pixel sprites) ─────────────────────────────
 // Each character is drawn using a grid of colored divs
-// Size unit: 1 pixel = 6px
+// Size unit: 1 pixel = 8px
 
-const PIXEL = 6;
+const PIXEL = 8;
 
 function Pixel({ color, size = 1 }: { color: string; size?: number }) {
   if (color === 'transparent' || color === '') return (
@@ -63,9 +63,10 @@ const CREATURE_COLORS = {
   steam: '#cccccc',
 };
 
-function CreatureSprite({ mood }: { mood: MoodTier }) {
+function CreatureSprite({ mood, blinking }: { mood: MoodTier; blinking?: boolean }) {
   const c = CREATURE_COLORS;
   const T = 'transparent';
+  const eye = blinking ? c.body : c.eye;
 
   const sprites: Record<MoodTier, JSX.Element> = {
     sunshine: (
@@ -74,7 +75,7 @@ function CreatureSprite({ mood }: { mood: MoodTier }) {
         <PixelRow pixels={[T, T, c.body, T, T, T, c.body, T, T]} />
         <PixelRow pixels={[T, c.body, c.body, T, T, T, c.body, c.body, T]} />
         <PixelRow pixels={[T, T, c.body, c.body, c.body, c.body, c.body, T, T]} />
-        <PixelRow pixels={[T, c.body, c.eye, c.body, c.body, c.eye, c.body, T, T]} />
+        <PixelRow pixels={[T, c.body, eye, c.body, c.body, eye, c.body, T, T]} />
         <PixelRow pixels={[T, c.body, c.blush, c.body, c.body, c.blush, c.body, T, T]} />
         <PixelRow pixels={[T, c.body, c.body, c.mouth, c.tongue, c.mouth, c.body, T, T]} />
         <PixelRow pixels={[T, T, c.body, c.body, c.body, c.body, c.body, T, T]} />
@@ -85,7 +86,7 @@ function CreatureSprite({ mood }: { mood: MoodTier }) {
       <div>
         <PixelRow pixels={[T, T, c.body, c.body, c.body, c.body, c.body, T, T]} />
         <PixelRow pixels={[T, c.body, c.body, c.body, c.body, c.body, c.body, c.body, T]} />
-        <PixelRow pixels={[T, c.body, c.eye, c.body, c.body, c.eye, c.body, c.body, T]} />
+        <PixelRow pixels={[T, c.body, eye, c.body, c.body, eye, c.body, c.body, T]} />
         <PixelRow pixels={[T, c.body, c.body, c.body, c.body, c.body, c.body, c.body, T]} />
         <PixelRow pixels={[T, c.body, c.body, c.mouth, c.mouth, c.mouth, c.body, c.body, T]} />
         <PixelRow pixels={[T, T, c.body, c.body, c.body, c.body, c.body, T, T]} />
@@ -96,7 +97,7 @@ function CreatureSprite({ mood }: { mood: MoodTier }) {
       <div>
         <PixelRow pixels={[T, T, c.body, c.body, c.body, c.body, c.body, T, T]} />
         <PixelRow pixels={[T, c.body, c.body, c.body, c.body, c.body, c.body, c.body, T]} />
-        <PixelRow pixels={[T, c.body, c.body, c.eye, c.body, c.body, c.eye, c.body, T]} />
+        <PixelRow pixels={[T, c.body, c.body, eye, c.body, c.body, eye, c.body, T]} />
         <PixelRow pixels={[T, c.body, c.body, c.body, c.body, c.body, c.body, c.body, T]} />
         <PixelRow pixels={[T, c.body, c.body, c.mouth, c.mouth, c.body, c.body, c.body, T]} />
         <PixelRow pixels={[T, T, c.body, c.body, c.body, c.body, c.body, T, T]} />
@@ -107,7 +108,7 @@ function CreatureSprite({ mood }: { mood: MoodTier }) {
       <div>
         <PixelRow pixels={[T, T, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, T, T]} />
         <PixelRow pixels={[T, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, T]} />
-        <PixelRow pixels={[T, c.bodyDark, c.eye, c.bodyDark, c.bodyDark, c.eye, c.bodyDark, c.bodyDark, T]} />
+        <PixelRow pixels={[T, c.bodyDark, eye, c.bodyDark, c.bodyDark, eye, c.bodyDark, c.bodyDark, T]} />
         <PixelRow pixels={[T, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, T]} />
         <PixelRow pixels={[T, c.bodyDark, c.mouth, c.mouth, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, T]} />
         <PixelRow pixels={[T, T, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, c.bodyDark, T, T]} />
@@ -148,7 +149,7 @@ const CAT_COLORS = {
   pupil: '#111111',
 };
 
-function CatSprite({ mood }: { mood: MoodTier }) {
+function CatSprite({ mood, blinking }: { mood: MoodTier; blinking?: boolean }) {
   const c = CAT_COLORS;
   const T = 'transparent';
 
@@ -167,7 +168,7 @@ function CatSprite({ mood }: { mood: MoodTier }) {
     );
   }
 
-  const eyeOpen = mood === 'sunshine' || mood === 'balanced';
+  const eyeOpen = !blinking && (mood === 'sunshine' || mood === 'balanced');
   const isHappy = mood === 'sunshine';
 
   return (
@@ -218,11 +219,12 @@ const GIRL_COLORS = {
   bow: '#ff3366',
 };
 
-function GirlSprite({ mood }: { mood: MoodTier }) {
+function GirlSprite({ mood, blinking }: { mood: MoodTier; blinking?: boolean }) {
   const c = GIRL_COLORS;
   const T = 'transparent';
 
   const dressColor = mood === 'sunshine' ? c.dress : mood === 'dark' ? '#444' : c.dressAlt;
+  const eyeColor = blinking ? c.skin : c.eye;
 
   return (
     <div>
@@ -231,7 +233,7 @@ function GirlSprite({ mood }: { mood: MoodTier }) {
       {/* Head */}
       <PixelRow pixels={[T, c.hair, c.skin, c.skin, c.skin, c.skin, c.hair, T]} />
       {/* Eyes */}
-      <PixelRow pixels={[T, c.hair, c.skin, c.eye, c.eye, c.skin, c.hair, T]} />
+      <PixelRow pixels={[T, c.hair, c.skin, eyeColor, eyeColor, c.skin, c.hair, T]} />
       {/* Blush & mouth */}
       {mood === 'sunshine' && (
         <PixelRow pixels={[T, c.hair, c.blush, c.skin, c.skin, c.blush, c.hair, T]} />
@@ -321,7 +323,9 @@ export function PixelCharacter({
 }: PixelCharacterProps) {
   const [showEffects, setShowEffects] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [isBlinking, setIsBlinking] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout>();
+  const blinkRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     if (animationLevel === 'off') return;
@@ -331,6 +335,23 @@ export function PixelCharacter({
       setTimeout(() => setShowEffects(false), 2000);
     }, 8000);
     return () => clearInterval(intervalRef.current);
+  }, [animationLevel]);
+
+  // Blinking effect - blink every 3-5 seconds
+  useEffect(() => {
+    if (animationLevel === 'off') return;
+    const scheduleBlink = () => {
+      const delay = 3000 + Math.random() * 2000;
+      blinkRef.current = setTimeout(() => {
+        setIsBlinking(true);
+        setTimeout(() => {
+          setIsBlinking(false);
+          scheduleBlink();
+        }, 150);
+      }, delay);
+    };
+    scheduleBlink();
+    return () => clearTimeout(blinkRef.current);
   }, [animationLevel]);
 
   const handleClick = () => {
@@ -353,11 +374,11 @@ export function PixelCharacter({
   const renderSprite = () => {
     switch (mode) {
       case 'cat':
-        return <CatSprite mood={moodTier} />;
+        return <CatSprite mood={moodTier} blinking={isBlinking} />;
       case 'girl':
-        return <GirlSprite mood={moodTier} />;
+        return <GirlSprite mood={moodTier} blinking={isBlinking} />;
       default:
-        return <CreatureSprite mood={moodTier} />;
+        return <CreatureSprite mood={moodTier} blinking={isBlinking} />;
     }
   };
 

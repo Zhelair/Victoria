@@ -107,12 +107,14 @@ export default function SettingsPage() {
   const handleUnlockTier = () => {
     const proCode = process.env.NEXT_PUBLIC_PRO_CODE || 'VICTORIA_PRO';
     const maxCode = process.env.NEXT_PUBLIC_MAX_CODE || 'VICTORIA_MAX';
-    if (passphraseInput === maxCode) {
+    const proCodes = proCode.split(',').map((s) => s.trim());
+    const maxCodes = maxCode.split(',').map((s) => s.trim());
+    if (maxCodes.includes(passphraseInput)) {
       useVictoriaStore.getState().setTier('max');
       updateSettings({ tier: 'max' });
       setPassphraseInput('');
       setPassphraseError(false);
-    } else if (passphraseInput === proCode) {
+    } else if (proCodes.includes(passphraseInput)) {
       useVictoriaStore.getState().setTier('pro');
       updateSettings({ tier: 'pro' });
       setPassphraseInput('');
