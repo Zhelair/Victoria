@@ -19,10 +19,10 @@ export default function StatsPage() {
   const [range, setRange] = useState<Range>(7);
   const [moodHistory, setMoodHistory] = useState<{ date: string; score: number }[]>([]);
   const [categoryData, setCategoryData] = useState<Record<string, { date: string; value: number }[]>>({});
-  const logCategories = useVictoriaStore((s: any) => s.logCategories);
-  const streakDays = useVictoriaStore((s: any) => s.streakDays);
-  const totalDays = useVictoriaStore((s: any) => s.totalDays);
-  const moodScore = useVictoriaStore((s: any) => s.moodScore);
+  const logCategories = useVictoriaStore((s) => s.logCategories);
+  const streakDays = useVictoriaStore((s) => s.streakDays);
+  const totalDays = useVictoriaStore((s) => s.totalDays);
+  const moodScore = useVictoriaStore((s) => s.moodScore);
 
   useEffect(() => {
     setMounted(true);
