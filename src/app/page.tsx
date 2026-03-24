@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useVictoriaStore } from '@/store';
@@ -34,18 +34,24 @@ export default function HomePage() {
   const router = useRouter();
   const { t } = useTranslation();
   const settings = useVictoriaStore((s) => s.settings);
-  const _hasHydrated = useVictoriaStore((s) => s._hasHydrated);
   const moodScore = useVictoriaStore((s) => s.moodScore);
   const adjustMoodScore = useVictoriaStore((s) => s.adjustMoodScore);
   const todos = useVictoriaStore((s) => s.logCategories); // placeholder
   const streakDays = useVictoriaStore((s) => s.streakDays);
 
+  // Wait one tick after mount so Zustand persist can finish reading localStorage
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    if (!_hasHydrated) return;
+    const t = setTimeout(() => setReady(true), 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
     if (!settings.onboardingDone) {
       router.replace('/onboarding');
     }
-  }, [_hasHydrated, settings.onboardingDone, router]);
+  }, [ready, settings.onboardingDone, router]);
 
   const hour = new Date().getHours();
   const greeting = getGreeting(hour);
@@ -73,7 +79,7 @@ export default function HomePage() {
     }
   };
 
-  if (!_hasHydrated) {
+  if (!ready) {
     return (
       <AppShell>
         <div style={{ minHeight: '60vh' }} />

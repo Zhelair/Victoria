@@ -334,7 +334,7 @@ export default function ChatPage() {
       <div className="flex flex-col h-[calc(100vh-8rem)]">
         {/* Sphere tabs */}
         <div
-          className="flex overflow-x-auto gap-1 px-3 py-2 border-b border-theme"
+          className="flex flex-wrap gap-1 px-3 py-2 border-b border-theme"
           style={{ backgroundColor: 'var(--card-bg)' }}
         >
           {(Object.keys(SPHERE_META) as ChatSphere[]).map((sphere) => {
@@ -348,7 +348,7 @@ export default function ChatPage() {
                   setActiveThreadId(null);
                 }}
                 className={cn(
-                  'flex items-center gap-1 px-3 py-1.5 rounded-full whitespace-nowrap transition-all text-xs',
+                  'flex items-center gap-1 px-3 py-1.5 rounded-full transition-all text-xs',
                   isActive ? 'text-white' : 'text-muted'
                 )}
                 style={{

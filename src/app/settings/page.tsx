@@ -136,14 +136,14 @@ export default function SettingsPage() {
       <div className="flex flex-col">
         {/* Section tabs (horizontal scroll) */}
         <div
-          className="flex overflow-x-auto gap-1 px-3 py-2 border-b border-theme"
+          className="flex flex-wrap gap-1 px-3 py-2 border-b border-theme"
           style={{ backgroundColor: 'var(--card-bg)' }}
         >
           {sections.map((s) => (
             <button
               key={s.id}
               onClick={() => setActiveSection(s.id)}
-              className="whitespace-nowrap px-3 py-1.5 rounded-full transition-all font-pixel text-[7px]"
+              className="px-3 py-1.5 rounded-full transition-all font-pixel text-[7px]"
               style={{
                 backgroundColor: activeSection === s.id ? 'var(--accent)' : 'var(--shell)',
                 color: activeSection === s.id ? 'white' : 'var(--text-muted)',

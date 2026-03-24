@@ -31,9 +31,11 @@ export default function OnboardingPage() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center p-6 max-w-md mx-auto"
-      style={{ backgroundColor: 'var(--bg)' }}
+      data-theme="midnight"
+      className="min-h-screen flex flex-col items-center justify-center p-6"
+      style={{ backgroundColor: '#0d0d1a' }}
     >
+    <div className="w-full max-w-md flex flex-col items-center">
       {/* Character */}
       <div className="mb-6">
         <PixelCharacter
@@ -159,6 +161,7 @@ export default function OnboardingPage() {
           />
         ))}
       </div>
+    </div>
     </div>
   );
 }
