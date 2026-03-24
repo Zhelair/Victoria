@@ -9,24 +9,24 @@ import { db, getMoodScoreHistory } from '@/lib/db';
 import type { LogEntry, LogCategory } from '@/types';
 
 // Recharts must be loaded client-side only
-const LineChart = dynamic(
-  () => import('recharts').then((m) => m.LineChart as any),
-  { ssr: false }
-);
-const BarChart = dynamic(
-  () => import('recharts').then((m) => m.BarChart as any),
-  { ssr: false }
-);
-const Line = dynamic(() => import('recharts').then((m) => m.Line as any), { ssr: false });
-const Bar = dynamic(() => import('recharts').then((m) => m.Bar as any), { ssr: false });
-const XAxis = dynamic(() => import('recharts').then((m) => m.XAxis as any), { ssr: false });
-const YAxis = dynamic(() => import('recharts').then((m) => m.YAxis as any), { ssr: false });
-const CartesianGrid = dynamic(() => import('recharts').then((m) => m.CartesianGrid as any), { ssr: false });
-const Tooltip = dynamic(() => import('recharts').then((m) => m.Tooltip as any), { ssr: false });
-const ResponsiveContainer = dynamic(
-  () => import('recharts').then((m) => m.ResponsiveContainer as any),
-  { ssr: false }
-);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const LineChart = dynamic<any>(() => import('recharts').then((m) => m.LineChart), { ssr: false });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const BarChart = dynamic<any>(() => import('recharts').then((m) => m.BarChart), { ssr: false });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Line = dynamic<any>(() => import('recharts').then((m) => m.Line), { ssr: false });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Bar = dynamic<any>(() => import('recharts').then((m) => m.Bar), { ssr: false });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const XAxis = dynamic<any>(() => import('recharts').then((m) => m.XAxis), { ssr: false });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const YAxis = dynamic<any>(() => import('recharts').then((m) => m.YAxis), { ssr: false });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const CartesianGrid = dynamic<any>(() => import('recharts').then((m) => m.CartesianGrid), { ssr: false });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Tooltip = dynamic<any>(() => import('recharts').then((m) => m.Tooltip), { ssr: false });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const ResponsiveContainer = dynamic<any>(() => import('recharts').then((m) => m.ResponsiveContainer), { ssr: false });
 
 type Range = 7 | 30 | 90;
 
