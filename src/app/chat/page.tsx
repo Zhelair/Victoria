@@ -35,6 +35,7 @@ export default function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const recognitionRef = useRef<any>(null);
+  const skipLoadRef = useRef(false);
   const [hasSpeechSupport, setHasSpeechSupport] = useState(false);
 
   // Detect speech support client-side (window is undefined during SSR)
@@ -53,6 +54,10 @@ export default function ChatPage() {
   // Load messages when thread changes
   useEffect(() => {
     if (activeThreadId) {
+      if (skipLoadRef.current) {
+        skipLoadRef.current = false;
+        return;
+      }
       loadMessages(activeThreadId);
     } else {
       setMessages([]);
@@ -128,6 +133,7 @@ export default function ChatPage() {
       };
       await db.chatThreads.add(thread);
       currentThreadId = thread.id;
+      skipLoadRef.current = true;
       setActiveThreadId(thread.id);
     }
 
@@ -532,6 +538,19 @@ export default function ChatPage() {
               rows={1}
               disabled={isStreaming}
             />
+
+            {/* Voice output toggle */}
+            <button
+              onClick={() => useVictoriaStore.getState().updateSettings({ voiceEnabled: !settings.voiceEnabled })}
+              className="flex-shrink-0 p-2 rounded-xl transition-all"
+              style={{
+                backgroundColor: settings.voiceEnabled ? 'var(--accent)' : 'var(--shell)',
+                color: settings.voiceEnabled ? 'white' : 'var(--text-muted)',
+              }}
+              title={settings.voiceEnabled ? 'Mute voice' : 'Enable voice'}
+            >
+              {settings.voiceEnabled ? '🔊' : '🔇'}
+            </button>
 
             {/* Mic button */}
             {hasSpeechSupport && (

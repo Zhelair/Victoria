@@ -31,7 +31,17 @@ if (!i18n.isInitialized) {
     .use(LanguageDetector)
     .use(initReactI18next)
     .init({
-      resources: { en, ru, bg, de, fr, es, pt, it, pl },
+      resources: {
+        en: { translation: en },
+        ru: { translation: ru },
+        bg: { translation: bg },
+        de: { translation: de },
+        fr: { translation: fr },
+        es: { translation: es },
+        pt: { translation: pt },
+        it: { translation: it },
+        pl: { translation: pl },
+      },
       fallbackLng: 'en',
       interpolation: { escapeValue: false },
       detection: {
