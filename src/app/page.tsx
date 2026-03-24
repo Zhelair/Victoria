@@ -73,7 +73,15 @@ export default function HomePage() {
     }
   };
 
-  if (!_hasHydrated || !settings.onboardingDone) return null;
+  if (!_hasHydrated) {
+    return (
+      <AppShell>
+        <div style={{ minHeight: '60vh' }} />
+      </AppShell>
+    );
+  }
+
+  if (!settings.onboardingDone) return null;
 
   return (
     <AppShell>
