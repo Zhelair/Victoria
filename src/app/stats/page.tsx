@@ -1,46 +1,31 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import dynamic from 'next/dynamic';
 import { useTranslation } from 'react-i18next';
+import {
+  LineChart, BarChart, Line, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts';
 import { AppShell } from '@/components/layout/AppShell';
 import { useVictoriaStore } from '@/store';
 import { db, getMoodScoreHistory } from '@/lib/db';
-import type { LogEntry, LogCategory } from '@/types';
 
-// Recharts must be loaded client-side only
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const LineChart = dynamic<any>(() => import('recharts').then((m) => m.LineChart), { ssr: false });
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const BarChart = dynamic<any>(() => import('recharts').then((m) => m.BarChart), { ssr: false });
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Line = dynamic<any>(() => import('recharts').then((m) => m.Line), { ssr: false });
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Bar = dynamic<any>(() => import('recharts').then((m) => m.Bar), { ssr: false });
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const XAxis = dynamic<any>(() => import('recharts').then((m) => m.XAxis), { ssr: false });
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const YAxis = dynamic<any>(() => import('recharts').then((m) => m.YAxis), { ssr: false });
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const CartesianGrid = dynamic<any>(() => import('recharts').then((m) => m.CartesianGrid), { ssr: false });
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Tooltip = dynamic<any>(() => import('recharts').then((m) => m.Tooltip), { ssr: false });
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ResponsiveContainer = dynamic<any>(() => import('recharts').then((m) => m.ResponsiveContainer), { ssr: false });
 
 type Range = 7 | 30 | 90;
 
 export default function StatsPage() {
   const { t } = useTranslation();
+  const [mounted, setMounted] = useState(false);
   const [range, setRange] = useState<Range>(7);
   const [moodHistory, setMoodHistory] = useState<{ date: string; score: number }[]>([]);
   const [categoryData, setCategoryData] = useState<Record<string, { date: string; value: number }[]>>({});
-  const logCategories = useVictoriaStore((s) => s.logCategories);
-  const streakDays = useVictoriaStore((s) => s.streakDays);
-  const totalDays = useVictoriaStore((s) => s.totalDays);
-  const moodScore = useVictoriaStore((s) => s.moodScore);
+  const logCategories = useVictoriaStore((s: any) => s.logCategories);
+  const streakDays = useVictoriaStore((s: any) => s.streakDays);
+  const totalDays = useVictoriaStore((s: any) => s.totalDays);
+  const moodScore = useVictoriaStore((s: any) => s.moodScore);
 
   useEffect(() => {
+    setMounted(true);
     loadData(range);
   }, [range]);
 
@@ -117,7 +102,7 @@ export default function StatsPage() {
           <h3 className="font-pixel text-[8px] mb-4" style={{ color: 'var(--text-muted)' }}>
             {t('stats.moodHistory')}
           </h3>
-          {moodHistory.length < 2 ? (
+          {!mounted || moodHistory.length < 2 ? (
             <p className="text-center text-sm py-6" style={{ color: 'var(--text-muted)' }}>
               {t('stats.noData')}
             </p>
@@ -158,10 +143,10 @@ export default function StatsPage() {
         </div>
 
         {/* Per-category charts */}
-        {numericCategories.map((cat) => {
+        {mounted && numericCategories.map((cat) => {
           const data = categoryData[cat.id]
-            .sort((a, b) => a.date.localeCompare(b.date))
-            .map((d) => ({ ...d, date: formatDate(d.date) }));
+            .sort((a: any, b: any) => a.date.localeCompare(b.date))
+            .map((d: any) => ({ ...d, date: formatDate(d.date) }));
 
           return (
             <div key={cat.id} className="card p-4">
