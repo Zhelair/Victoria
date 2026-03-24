@@ -1,0 +1,301 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── CSS Variables by Theme ─────────────────────────────────────── */
+:root {
+  --bg: #f5f0e8;
+  --shell: #e8d5a3;
+  --shell-dark: #c8a855;
+  --screen-bg: #9bbc0f;
+  --screen-dark: #0f380f;
+  --screen-light: #8bac0f;
+  --text: #0f380f;
+  --text-muted: #4a5a3a;
+  --accent: #ff6b9d;
+  --accent-2: #c8b560;
+  --button-bg: #c8b560;
+  --button-hover: #b09040;
+  --card-bg: #faf5e8;
+  --border: #c8a855;
+  --shadow: rgba(0, 0, 0, 0.15);
+  --pixel-size: 3px;
+}
+
+[data-theme='midnight'] {
+  --bg: #0d0d1a;
+  --shell: #1a1a2e;
+  --shell-dark: #0f0f23;
+  --screen-bg: #16213e;
+  --screen-dark: #0a0a1a;
+  --screen-light: #1e2d4e;
+  --text: #e0e0ff;
+  --text-muted: #8888cc;
+  --accent: #a855f7;
+  --accent-2: #7c3aed;
+  --button-bg: #4c1d95;
+  --button-hover: #5b21b6;
+  --card-bg: #1a1a2e;
+  --border: #2d2d5e;
+  --shadow: rgba(124, 58, 237, 0.2);
+}
+
+[data-theme='clean'] {
+  --bg: #fafafa;
+  --shell: #f0f0f0;
+  --shell-dark: #d0d0d0;
+  --screen-bg: #ffffff;
+  --screen-dark: #f5f5f5;
+  --screen-light: #e8e8ff;
+  --text: #1a1a1a;
+  --text-muted: #666666;
+  --accent: #6366f1;
+  --accent-2: #8b5cf6;
+  --button-bg: #e0e7ff;
+  --button-hover: #c7d2fe;
+  --card-bg: #ffffff;
+  --border: #e5e5e5;
+  --shadow: rgba(0, 0, 0, 0.08);
+}
+
+/* ─── Base ───────────────────────────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Pixel Font Utility ─────────────────────────────────────────── */
+.font-pixel {
+  font-family: 'Press Start 2P', monospace;
+  line-height: 1.6;
+  letter-spacing: 0.05em;
+}
+
+/* ─── Tamagotchi Screen ──────────────────────────────────────────── */
+.tama-shell {
+  background: var(--shell);
+  border: 4px solid var(--shell-dark);
+  border-radius: 50% 50% 45% 45% / 40% 40% 60% 60%;
+  box-shadow:
+    inset 0 -4px 8px rgba(0,0,0,0.2),
+    inset 0 4px 8px rgba(255,255,255,0.3),
+    0 8px 24px var(--shadow);
+}
+
+.tama-screen {
+  background: var(--screen-bg);
+  border: 3px solid var(--screen-dark);
+  border-radius: 8px;
+  box-shadow:
+    inset 0 0 12px rgba(0,0,0,0.3),
+    inset 2px 2px 0 rgba(255,255,255,0.1);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  position: relative;
+  overflow: hidden;
+}
+
+.tama-screen::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 10;
+}
+
+.tama-button {
+  background: var(--button-bg);
+  border: 2px solid var(--button-hover);
+  border-radius: 50%;
+  box-shadow:
+    0 4px 0 var(--button-hover),
+    inset 0 2px 0 rgba(255,255,255,0.3);
+  transition: transform 0.1s, box-shadow 0.1s;
+  cursor: pointer;
+}
+
+.tama-button:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 2px 0 var(--button-hover),
+    inset 0 2px 0 rgba(255,255,255,0.3);
+}
+
+/* ─── Mood Bar ───────────────────────────────────────────────────── */
+.mood-bar-track {
+  background: var(--screen-dark);
+  border: 1px solid rgba(0,0,0,0.3);
+  border-radius: 2px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.mood-bar-fill {
+  height: 100%;
+  border-radius: 1px;
+  transition: width 0.6s ease-out;
+  image-rendering: pixelated;
+}
+
+/* ─── Card ───────────────────────────────────────────────────────── */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+/* ─── Pixel Art Animations ───────────────────────────────────────── */
+@keyframes pixelFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes pixelBounce {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  40% { transform: translateY(-12px) scaleY(1.05); }
+  60% { transform: translateY(-8px) scaleY(0.98); }
+}
+
+@keyframes pixelWaddle {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+
+@keyframes pixelSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pixelPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+@keyframes pixelShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+@keyframes pixelAngry {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  20% { transform: translateX(-3px) rotate(-2deg); }
+  40% { transform: translateX(3px) rotate(2deg); }
+  60% { transform: translateX(-3px) rotate(-2deg); }
+  80% { transform: translateX(3px) rotate(2deg); }
+}
+
+@keyframes pixelSleep {
+  0%, 100% { opacity: 1; transform: translateY(0); }
+  50% { opacity: 0.6; transform: translateY(2px); }
+}
+
+@keyframes pixelCelebrate {
+  0% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.2) rotate(-5deg); }
+  50% { transform: scale(1.2) rotate(5deg); }
+  75% { transform: scale(1.15) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes starPop {
+  0% { transform: scale(0) rotate(0deg); opacity: 1; }
+  100% { transform: scale(1.5) rotate(180deg); opacity: 0; }
+}
+
+@keyframes heartFloat {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  100% { transform: translateY(-40px) scale(0.5); opacity: 0; }
+}
+
+@keyframes zzzFloat {
+  0% { transform: translateY(0) translateX(0) scale(0.6); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translateY(-30px) translateX(10px) scale(1); opacity: 0; }
+}
+
+.animate-pixel-float { animation: pixelFloat 2.5s ease-in-out infinite; }
+.animate-pixel-bounce { animation: pixelBounce 0.8s ease-in-out infinite; }
+.animate-pixel-waddle { animation: pixelWaddle 0.6s ease-in-out infinite; }
+.animate-pixel-pulse { animation: pixelPulse 2s ease-in-out infinite; }
+.animate-pixel-shake { animation: pixelShake 0.4s ease-in-out 3; }
+.animate-pixel-angry { animation: pixelAngry 0.5s ease-in-out infinite; }
+.animate-pixel-sleep { animation: pixelSleep 3s ease-in-out infinite; }
+.animate-pixel-celebrate { animation: pixelCelebrate 0.6s ease-in-out; }
+
+/* ─── Chat Bubbles ───────────────────────────────────────────────── */
+.chat-bubble-assistant {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 0 12px 12px 12px;
+}
+
+.chat-bubble-user {
+  background: var(--accent);
+  color: white;
+  border-radius: 12px 0 12px 12px;
+}
+
+/* ─── Bottom Nav ─────────────────────────────────────────────────── */
+.bottom-nav {
+  background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 12px var(--shadow);
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+/* ─── Focus Ring ─────────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ─── Pixel Grid Overlay (screen effect) ────────────────────────── */
+.pixel-grid {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+/* ─── Utility ────────────────────────────────────────────────────── */
+.text-accent { color: var(--accent); }
+.bg-accent { background-color: var(--accent); }
+.border-theme { border-color: var(--border); }
+.text-muted { color: var(--text-muted); }
+.bg-screen { background-color: var(--screen-bg); }
+.bg-card { background-color: var(--card-bg); }
+.bg-shell { background-color: var(--shell); }
