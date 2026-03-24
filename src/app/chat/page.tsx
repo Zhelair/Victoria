@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { v4 as uuidv4 } from 'uuid';
 import { useVictoriaStore } from '@/store';
@@ -8,6 +8,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { db } from '@/lib/db';
 import { extractFileContent, formatFileSize, SUPPORTED_FILE_TYPES, MAX_FILE_SIZE, truncate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
+import { getMoodTier } from '@/types';
 import type { ChatThread, ChatMessage, ChatSphere } from '@/types';
 import { SPHERE_META } from '@/types';
 
@@ -33,7 +34,16 @@ export default function ChatPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const [hasSpeechSupport, setHasSpeechSupport] = useState(false);
+
+  // Detect speech support client-side (window is undefined during SSR)
+  useEffect(() => {
+    setHasSpeechSupport(
+      typeof window !== 'undefined' &&
+      ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)
+    );
+  }, []);
 
   // Load threads for active sphere
   useEffect(() => {
@@ -157,7 +167,6 @@ export default function ChatPage() {
 
     try {
       abortRef.current = new AbortController();
-      const { getMoodTier } = await import('@/types');
       const moodTier = getMoodTier(moodScore);
 
       const apiMessages = updatedMessages
@@ -286,7 +295,7 @@ export default function ChatPage() {
     recognition.continuous = false;
     recognition.interimResults = false;
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
+    recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
       setInput((prev) => prev + (prev ? ' ' : '') + transcript);
     };
@@ -525,7 +534,7 @@ export default function ChatPage() {
             />
 
             {/* Mic button */}
-            {('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) && (
+            {hasSpeechSupport && (
               <button
                 onClick={toggleListening}
                 className={cn(
