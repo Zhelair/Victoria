@@ -226,6 +226,9 @@ export interface AppSettings {
   createdAt: number;
   firstOpenDate: string;
   messageCount: number;
+  tamaShellColor?: string; // custom shell color (hex)
+  tamaScreenColor?: string; // custom screen color (hex)
+  soundsEnabled: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -248,4 +251,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   createdAt: Date.now(),
   firstOpenDate: new Date().toISOString().split('T')[0],
   messageCount: 0,
+  soundsEnabled: false,
 };

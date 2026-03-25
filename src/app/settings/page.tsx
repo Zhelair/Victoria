@@ -336,6 +336,51 @@ export default function SettingsPage() {
                 </div>
               </SettingsSection>
 
+              {/* Tamagotchi Colors */}
+              <SettingsSection title="Tamagotchi Colors">
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1">
+                    <p className="font-pixel text-[6px] mb-2" style={{ color: 'var(--text-muted)' }}>SHELL</p>
+                    <input
+                      type="color"
+                      value={settings.tamaShellColor ?? '#e8d5a3'}
+                      onChange={(e) => updateSettings({ tamaShellColor: e.target.value })}
+                      className="w-full rounded-lg cursor-pointer"
+                      style={{ height: '36px', border: '1px solid var(--border)', padding: '2px 4px', backgroundColor: 'var(--shell)' }}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-pixel text-[6px] mb-2" style={{ color: 'var(--text-muted)' }}>SCREEN</p>
+                    <input
+                      type="color"
+                      value={settings.tamaScreenColor ?? '#9bbc0f'}
+                      onChange={(e) => updateSettings({ tamaScreenColor: e.target.value })}
+                      className="w-full rounded-lg cursor-pointer"
+                      style={{ height: '36px', border: '1px solid var(--border)', padding: '2px 4px', backgroundColor: 'var(--shell)' }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => updateSettings({ tamaShellColor: undefined, tamaScreenColor: undefined })}
+                    className="px-3 py-2 rounded-xl font-pixel text-[6px] transition-all active:scale-95"
+                    style={{ backgroundColor: 'var(--shell)', border: '1px solid var(--border)', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}
+                  >
+                    Reset
+                  </button>
+                </div>
+              </SettingsSection>
+
+              {/* Sounds */}
+              <SettingsSection title="Sounds">
+                <ToggleRow
+                  label="8-bit sound effects"
+                  value={settings.soundsEnabled ?? false}
+                  onChange={(v) => updateSettings({ soundsEnabled: v })}
+                />
+                <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                  Plays short retro sounds when interacting with the tamagotchi.
+                </p>
+              </SettingsSection>
+
               {/* Wake time */}
               <SettingsSection title={t('settings.wakeUpTime')}>
                 <input

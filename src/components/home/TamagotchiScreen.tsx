@@ -1,10 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVictoriaStore } from '@/store';
 import { getMoodTier, MOOD_TIER_NAMES } from '@/types';
 import { PixelCharacter } from './PixelCharacter';
+import {
+  playFeed, playPlay, playClean, playSleep,
+  playHiss, playPurr, playGift, playCompliment, playInteract,
+} from '@/lib/sounds';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function darkenHex(hex: string, factor = 0.65): string {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return hex;
+  const r = Math.max(0, Math.round(parseInt(clean.slice(0, 2), 16) * factor));
+  const g = Math.max(0, Math.round(parseInt(clean.slice(2, 4), 16) * factor));
+  const b = Math.max(0, Math.round(parseInt(clean.slice(4, 6), 16) * factor));
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function TamagotchiScreen() {
   const { t } = useTranslation();
@@ -17,29 +34,47 @@ export function TamagotchiScreen() {
 
   const [tapFeedback, setTapFeedback] = useState<string | null>(null);
   const [gameFeedback, setGameFeedback] = useState<{ text: string; color: string } | null>(null);
-  // Cat box: after 3 mouse toy catches while in box, temporarily dismiss
   const [catBoxCatches, setCatBoxCatches] = useState(0);
   const [catBoxDismissed, setCatBoxDismissed] = useState(false);
+  const [isIdle, setIsIdle] = useState(false);
+  const idleTimerRef = useRef<NodeJS.Timeout>();
 
   const moodTier = getMoodTier(moodScore);
   const tierName = MOOD_TIER_NAMES[moodTier];
   const isCat = settings.characterMode === 'cat';
   const isGirl = settings.characterMode === 'girl';
+  const snd = settings.soundsEnabled;
 
   const today = new Date().toISOString().split('T')[0];
-  // Merge defaults so new fields work even if old save doesn't have them
   const u = {
     feed: 0, play: 0, cleaned: false, slept: false, giftGiven: false, complimentCount: 0,
     ...(miniGameUsage.date === today ? miniGameUsage : { date: today }),
   };
 
-  // Cat is in cardboard box mode when angry, unless temporarily dismissed
   const catInBox = isCat && (moodTier === 'icequeen' || moodTier === 'dark') && !catBoxDismissed;
 
   const happyBar = moodScore;
   const focusBar = Math.min(100, moodScore + 10);
   const healthBar = Math.max(20, Math.min(100, moodScore + 5));
 
+  // ─── Idle detection ────────────────────────────────────────────────────────
+  useEffect(() => {
+    const IDLE_MS = 20_000;
+    const reset = () => {
+      setIsIdle(false);
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => setIsIdle(true), IDLE_MS);
+    };
+    const events = ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll', 'click'] as const;
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    reset();
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, reset));
+      clearTimeout(idleTimerRef.current);
+    };
+  }, []);
+
+  // ─── Helpers ───────────────────────────────────────────────────────────────
   const showFeedback = (text: string, color = 'var(--accent)') => {
     setGameFeedback({ text, color });
     setTimeout(() => setGameFeedback(null), 1800);
@@ -59,6 +94,7 @@ export function TamagotchiScreen() {
       setTapFeedback(pick);
       setTimeout(() => setTapFeedback(null), 1200);
     }
+    if (snd) playInteract();
   };
 
   const handleGame = (game: 'feed' | 'play' | 'clean' | 'sleep') => {
@@ -74,6 +110,12 @@ export function TamagotchiScreen() {
       sleep: '💤 Goodnight...',
     };
     showFeedback(messages[game] ?? 'Done!', result.delta > 0 ? '#22c55e' : 'var(--text-muted)');
+    if (snd) {
+      if (game === 'feed') playFeed();
+      else if (game === 'play') playPlay();
+      else if (game === 'clean') playClean();
+      else if (game === 'sleep') playSleep();
+    }
   };
 
   const handleBellyRub = () => {
@@ -82,16 +124,18 @@ export function TamagotchiScreen() {
     if (Math.random() < hissChance) {
       adjustMoodScore(-1);
       showFeedback('😾 HISS! She bit you! -1', '#ef4444');
+      if (snd) playHiss();
     } else {
       adjustMoodScore(2);
       showFeedback('😻 Purrrr... +2', '#22c55e');
+      if (snd) playPurr();
     }
   };
 
   const handleMouseToy = () => {
     const result = recordMiniGame('play');
     if (!result.allowed) {
-      showFeedback('She\'s tired of the mouse today.', 'var(--text-muted)');
+      showFeedback("She's tired of the mouse today.", 'var(--text-muted)');
       return;
     }
     if (catInBox) {
@@ -101,13 +145,14 @@ export function TamagotchiScreen() {
         setCatBoxDismissed(true);
         showFeedback('🐱 She emerges... still grumpy. +2', '#f59e0b');
         adjustMoodScore(2);
-        setTimeout(() => { setCatBoxDismissed(false); setCatBoxCatches(0); }, 30000); // back in box after 30s
+        setTimeout(() => { setCatBoxDismissed(false); setCatBoxCatches(0); }, 30000);
       } else {
         showFeedback(`👀 Two eyes blink from the box... ${3 - newCatches} more`, '#f59e0b');
         adjustMoodScore(1);
       }
     } else {
       showFeedback(`🐭 She catches it! +${result.delta}`, '#22c55e');
+      if (snd) playPlay();
     }
   };
 
@@ -120,6 +165,7 @@ export function TamagotchiScreen() {
     if (moodTier === 'sunshine' || moodTier === 'balanced') {
       adjustMoodScore(3);
       showFeedback('🎁 She loves it! ✨ +3', '#22c55e');
+      if (snd) playGift();
     } else if (moodTier === 'sideeye') {
       adjustMoodScore(1);
       showFeedback('😐 She accepts it. +1', '#f59e0b');
@@ -137,12 +183,21 @@ export function TamagotchiScreen() {
     if (moodTier === 'sunshine' || moodTier === 'balanced') {
       adjustMoodScore(1);
       showFeedback('💬 She blushes! +1', '#ff9999');
+      if (snd) playCompliment();
     } else if (moodTier === 'sideeye') {
       showFeedback('📚 Side-eye. She keeps reading.', 'var(--text-muted)');
     } else {
       showFeedback('💅 She points at your streak...', '#ef4444');
     }
   };
+
+  // ─── Color overrides ───────────────────────────────────────────────────────
+  const shellStyle = settings.tamaShellColor
+    ? { backgroundColor: settings.tamaShellColor, borderColor: darkenHex(settings.tamaShellColor) }
+    : {};
+  const screenStyle = settings.tamaScreenColor
+    ? { backgroundColor: settings.tamaScreenColor, borderColor: darkenHex(settings.tamaScreenColor, 0.5) }
+    : {};
 
   return (
     <div className="flex flex-col items-center">
@@ -151,20 +206,22 @@ export function TamagotchiScreen() {
         <span className="font-pixel text-[8px]" style={{ color: 'var(--text-muted)' }}>
           {tierName.toUpperCase()}
           {catInBox && ' · 📦 BOX MODE'}
+          {isIdle && ' · 💤'}
         </span>
       </div>
 
       {/* Shell + screen */}
       <div
         className="tama-shell w-full max-w-[280px] aspect-square flex items-center justify-center p-5"
-        style={{ position: 'relative' }}
+        style={{ position: 'relative', ...shellStyle }}
       >
-        <div className="tama-screen w-full h-full flex flex-col items-center justify-between p-3">
+        <div className="tama-screen w-full h-full flex flex-col items-center justify-between p-3" style={screenStyle}>
           <div className="flex-1 flex items-center justify-center relative">
             <PixelCharacter
               mode={settings.characterMode}
               moodTier={catBoxDismissed ? 'sideeye' : moodTier}
               animationLevel={settings.animationLevel}
+              isIdle={isIdle}
               onInteract={handleInteract}
             />
             {tapFeedback && (
@@ -231,10 +288,15 @@ export function TamagotchiScreen() {
         )}
       </div>
 
-      {/* Cat box hint */}
+      {/* Hints */}
       {catInBox && (
         <p className="mt-2 font-pixel text-center" style={{ fontSize: '6px', color: 'var(--text-muted)' }}>
-          🐱 She's in the box. Use LURE 3× to coax her out.
+          🐱 She&apos;s in the box. Use LURE 3× to coax her out.
+        </p>
+      )}
+      {isIdle && !catInBox && (
+        <p className="mt-2 font-pixel text-center" style={{ fontSize: '6px', color: 'var(--text-muted)' }}>
+          She&apos;s doing her own thing... tap to wake her up.
         </p>
       )}
     </div>
