@@ -144,9 +144,6 @@ export function TamagotchiScreen() {
     }
   };
 
-  // Override moodTier for cat sprite: use box if in box mode
-  const catEffectiveMood = catInBox ? moodTier : moodTier;
-
   return (
     <div className="flex flex-col items-center">
       {/* Mood name */}
