@@ -145,7 +145,7 @@ export const useVictoriaStore = create<VictoriaState>()(
       recordMiniGame: (game) => {
         const today = new Date().toISOString().split('T')[0];
         const prev = get().miniGameUsage;
-        const u = prev.date === today ? prev : { date: today, feed: 0, play: 0, cleaned: false, slept: false };
+        const u = prev.date === today ? prev : { date: today, feed: 0, play: 0, cleaned: false, slept: false, giftGiven: false, complimentCount: 0 };
         const newU = { ...u };
         let delta = 0;
         let allowed = false;

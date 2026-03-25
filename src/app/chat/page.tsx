@@ -267,7 +267,19 @@ export default function ChatPage() {
   const speak = (text: string) => {
     if (!('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text.slice(0, 500));
+    // Strip markdown so the voice doesn't read out "asterisk asterisk" etc.
+    const clean = text
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/`{1,3}[^`]*`{1,3}/g, '')
+      .replace(/#{1,6}\s+/g, '')
+      .replace(/\[(.+?)\]\(.+?\)/g, '$1')
+      .replace(/^[\s]*[-*+]\s/gm, '')
+      .replace(/^[\s]*\d+\.\s/gm, '')
+      .replace(/\n{2,}/g, '. ')
+      .replace(/\n/g, ' ')
+      .trim();
+    const utterance = new SpeechSynthesisUtterance(clean.slice(0, 600));
     utterance.rate = settings.voiceRate;
     utterance.pitch = settings.voicePitch;
     utterance.lang = settings.language;
