@@ -324,6 +324,8 @@ export function PixelCharacter({
   const [showEffects, setShowEffects] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isBlinking, setIsBlinking] = useState(false);
+  const [wanderX, setWanderX] = useState(0);
+  const [facingRight, setFacingRight] = useState(true);
   const intervalRef = useRef<NodeJS.Timeout>();
   const blinkRef = useRef<NodeJS.Timeout>();
 
@@ -353,6 +355,29 @@ export function PixelCharacter({
     scheduleBlink();
     return () => clearTimeout(blinkRef.current);
   }, [animationLevel]);
+
+  // Horizontal wandering — stays still in dark/icequeen moods
+  useEffect(() => {
+    if (animationLevel === 'off' || animationLevel === 'reduced') return;
+    if (moodTier === 'dark') return; // curled up, doesn't move
+    let tid: NodeJS.Timeout;
+    const wander = () => {
+      setWanderX((prev) => {
+        const next = Math.round((Math.random() - 0.5) * 56);
+        setFacingRight(next >= prev);
+        return next;
+      });
+      tid = setTimeout(wander, 2200 + Math.random() * 3000);
+    };
+    tid = setTimeout(wander, 800 + Math.random() * 1500);
+    return () => clearTimeout(tid);
+  }, [animationLevel, moodTier]);
+
+  // Reset to centre when dark mode (huddle in corner)
+  useEffect(() => {
+    if (moodTier === 'dark') { setWanderX(-20); setFacingRight(false); }
+    if (moodTier === 'icequeen') { setWanderX(0); }
+  }, [moodTier]);
 
   const handleClick = () => {
     if (animationLevel !== 'off') {
@@ -389,7 +414,14 @@ export function PixelCharacter({
       role="button"
       aria-label="Victoria - tap to interact"
     >
-      <div className={cn('relative transition-transform', animClass)} style={{ imageRendering: 'pixelated' }}>
+      <div
+        className={cn('relative', animClass)}
+        style={{
+          imageRendering: 'pixelated',
+          transform: `translateX(${wanderX}px) scaleX(${facingRight ? 1 : -1})`,
+          transition: 'transform 0.9s ease-in-out',
+        }}
+      >
         {renderSprite()}
       </div>
       <FloatingEffects mood={moodTier} visible={showEffects && animationLevel !== 'off'} />

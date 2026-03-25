@@ -47,6 +47,27 @@ export default function HomePage() {
     return () => clearTimeout(t);
   }, []);
 
+  // Morning alarm — fires when clock matches wakeUpTime
+  useEffect(() => {
+    if (!settings.notificationsEnabled || !settings.wakeUpTime) return;
+    const alreadyFiredKey = `alarm-fired-${new Date().toISOString().split('T')[0]}`;
+    const tick = setInterval(() => {
+      const now = new Date();
+      const [h, m] = settings.wakeUpTime.split(':').map(Number);
+      if (now.getHours() === h && now.getMinutes() === m) {
+        if (sessionStorage.getItem(alreadyFiredKey)) return;
+        sessionStorage.setItem(alreadyFiredKey, '1');
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Good morning! ☀️', {
+            body: `Time to check in, ${settings.userName || 'friend'}. Victoria is waiting.`,
+            icon: '/icon-192.png',
+          });
+        }
+      }
+    }, 30_000); // check every 30s
+    return () => clearInterval(tick);
+  }, [settings.notificationsEnabled, settings.wakeUpTime, settings.userName]);
+
   useEffect(() => {
     if (!ready) return;
     if (!settings.onboardingDone) {

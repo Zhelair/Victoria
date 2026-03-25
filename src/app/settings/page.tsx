@@ -350,6 +350,32 @@ export default function SettingsPage() {
                   }}
                 />
               </SettingsSection>
+
+              {/* Push notifications */}
+              <SettingsSection title={t('settings.notifications')}>
+                <ToggleRow
+                  label={t('settings.enableNotifications')}
+                  value={settings.notificationsEnabled}
+                  onChange={async (v) => {
+                    if (v && 'Notification' in window) {
+                      const perm = await Notification.requestPermission();
+                      updateSettings({ notificationsEnabled: perm === 'granted' });
+                    } else {
+                      updateSettings({ notificationsEnabled: v });
+                    }
+                  }}
+                />
+                {settings.notificationsEnabled && (
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                    Morning alarm set for {settings.wakeUpTime}. Install as PWA for background alerts.
+                  </p>
+                )}
+                {!settings.notificationsEnabled && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied' && (
+                  <p className="text-xs mt-1" style={{ color: '#ef4444' }}>
+                    Notifications blocked in browser. Enable them in your browser settings first.
+                  </p>
+                )}
+              </SettingsSection>
             </div>
           )}
 

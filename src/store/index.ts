@@ -73,8 +73,11 @@ interface VictoriaState {
     play: number;
     cleaned: boolean;
     slept: boolean;
+    giftGiven: boolean;
+    complimentCount: number;
   };
   recordMiniGame: (game: 'feed' | 'play' | 'clean' | 'sleep') => { allowed: boolean; delta: number };
+  recordGirlInteraction: (type: 'gift' | 'compliment') => { allowed: boolean };
 }
 
 export const useVictoriaStore = create<VictoriaState>()(
@@ -138,7 +141,7 @@ export const useVictoriaStore = create<VictoriaState>()(
 
       getMoodTier: () => getMoodTier(get().moodScore),
 
-      miniGameUsage: { date: '', feed: 0, play: 0, cleaned: false, slept: false },
+      miniGameUsage: { date: '', feed: 0, play: 0, cleaned: false, slept: false, giftGiven: false, complimentCount: 0 },
       recordMiniGame: (game) => {
         const today = new Date().toISOString().split('T')[0];
         const prev = get().miniGameUsage;
@@ -157,6 +160,21 @@ export const useVictoriaStore = create<VictoriaState>()(
           }));
         }
         return { allowed, delta };
+      },
+
+      recordGirlInteraction: (type) => {
+        const today = new Date().toISOString().split('T')[0];
+        const prev = get().miniGameUsage;
+        const u = prev.date === today
+          ? { giftGiven: false, complimentCount: 0, ...prev }
+          : { date: today, feed: 0, play: 0, cleaned: false, slept: false, giftGiven: false, complimentCount: 0 };
+        if (type === 'gift' && u.giftGiven) return { allowed: false };
+        if (type === 'compliment' && u.complimentCount >= 3) return { allowed: false };
+        const newU = { ...u };
+        if (type === 'gift') newU.giftGiven = true;
+        else newU.complimentCount++;
+        set({ miniGameUsage: newU });
+        return { allowed: true };
       },
     }),
     {
