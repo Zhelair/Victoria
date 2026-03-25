@@ -41,10 +41,32 @@ export default function HomePage() {
 
   // Wait one tick after mount so Zustand persist can finish reading localStorage
   const [ready, setReady] = useState(false);
+  const [tamaMode, setTamaMode] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setReady(true), 0);
     return () => clearTimeout(t);
   }, []);
+
+  // Morning alarm — fires when clock matches wakeUpTime
+  useEffect(() => {
+    if (!settings.notificationsEnabled || !settings.wakeUpTime) return;
+    const alreadyFiredKey = `alarm-fired-${new Date().toISOString().split('T')[0]}`;
+    const tick = setInterval(() => {
+      const now = new Date();
+      const [h, m] = settings.wakeUpTime.split(':').map(Number);
+      if (now.getHours() === h && now.getMinutes() === m) {
+        if (sessionStorage.getItem(alreadyFiredKey)) return;
+        sessionStorage.setItem(alreadyFiredKey, '1');
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('Good morning! ☀️', {
+            body: `Time to check in, ${settings.userName || 'friend'}. Victoria is waiting.`,
+            icon: '/icon-192.png',
+          });
+        }
+      }
+    }, 30_000); // check every 30s
+    return () => clearInterval(tick);
+  }, [settings.notificationsEnabled, settings.wakeUpTime, settings.userName]);
 
   useEffect(() => {
     if (!ready) return;
@@ -105,7 +127,36 @@ export default function HomePage() {
         )}
 
         {/* Tamagotchi Screen */}
-        <TamagotchiScreen />
+        <div className="relative">
+          <TamagotchiScreen />
+          <button
+            onClick={() => setTamaMode(true)}
+            className="absolute top-0 right-0 p-1.5 rounded-xl font-pixel text-[6px] transition-all active:scale-95"
+            style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+            title="Tamagotchi mode"
+          >
+            🎮
+          </button>
+        </div>
+
+        {/* Tamagotchi fullscreen overlay */}
+        {tamaMode && (
+          <div
+            className="fixed inset-0 z-50 flex flex-col items-center justify-center"
+            style={{ backgroundColor: 'var(--bg)' }}
+          >
+            <button
+              onClick={() => setTamaMode(false)}
+              className="absolute top-4 right-4 p-2 rounded-xl font-pixel text-[9px]"
+              style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+            >
+              ✕
+            </button>
+            <div className="w-full max-w-sm px-6">
+              <TamagotchiScreen />
+            </div>
+          </div>
+        )}
 
         {/* Streak badge */}
         {streakDays > 0 && (

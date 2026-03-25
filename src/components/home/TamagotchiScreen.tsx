@@ -13,17 +13,28 @@ export function TamagotchiScreen() {
   const adjustMoodScore = useVictoriaStore((s) => s.adjustMoodScore);
   const miniGameUsage = useVictoriaStore((s) => s.miniGameUsage);
   const recordMiniGame = useVictoriaStore((s) => s.recordMiniGame);
+  const recordGirlInteraction = useVictoriaStore((s) => s.recordGirlInteraction);
 
   const [tapFeedback, setTapFeedback] = useState<string | null>(null);
   const [gameFeedback, setGameFeedback] = useState<{ text: string; color: string } | null>(null);
+  // Cat box: after 3 mouse toy catches while in box, temporarily dismiss
+  const [catBoxCatches, setCatBoxCatches] = useState(0);
+  const [catBoxDismissed, setCatBoxDismissed] = useState(false);
 
   const moodTier = getMoodTier(moodScore);
   const tierName = MOOD_TIER_NAMES[moodTier];
+  const isCat = settings.characterMode === 'cat';
+  const isGirl = settings.characterMode === 'girl';
 
   const today = new Date().toISOString().split('T')[0];
-  const u = miniGameUsage.date === today
-    ? miniGameUsage
-    : { date: today, feed: 0, play: 0, cleaned: false, slept: false };
+  // Merge defaults so new fields work even if old save doesn't have them
+  const u = {
+    feed: 0, play: 0, cleaned: false, slept: false, giftGiven: false, complimentCount: 0,
+    ...(miniGameUsage.date === today ? miniGameUsage : { date: today }),
+  };
+
+  // Cat is in cardboard box mode when angry, unless temporarily dismissed
+  const catInBox = isCat && (moodTier === 'icequeen' || moodTier === 'dark') && !catBoxDismissed;
 
   const happyBar = moodScore;
   const focusBar = Math.min(100, moodScore + 10);
@@ -77,7 +88,64 @@ export function TamagotchiScreen() {
     }
   };
 
-  const isCat = settings.characterMode === 'cat';
+  const handleMouseToy = () => {
+    const result = recordMiniGame('play');
+    if (!result.allowed) {
+      showFeedback('She\'s tired of the mouse today.', 'var(--text-muted)');
+      return;
+    }
+    if (catInBox) {
+      const newCatches = catBoxCatches + 1;
+      setCatBoxCatches(newCatches);
+      if (newCatches >= 3) {
+        setCatBoxDismissed(true);
+        showFeedback('🐱 She emerges... still grumpy. +2', '#f59e0b');
+        adjustMoodScore(2);
+        setTimeout(() => { setCatBoxDismissed(false); setCatBoxCatches(0); }, 30000); // back in box after 30s
+      } else {
+        showFeedback(`👀 Two eyes blink from the box... ${3 - newCatches} more`, '#f59e0b');
+        adjustMoodScore(1);
+      }
+    } else {
+      showFeedback(`🐭 She catches it! +${result.delta}`, '#22c55e');
+    }
+  };
+
+  const handleGirlGift = () => {
+    const result = recordGirlInteraction('gift');
+    if (!result.allowed) {
+      showFeedback('Already gifted today!', 'var(--text-muted)');
+      return;
+    }
+    if (moodTier === 'sunshine' || moodTier === 'balanced') {
+      adjustMoodScore(3);
+      showFeedback('🎁 She loves it! ✨ +3', '#22c55e');
+    } else if (moodTier === 'sideeye') {
+      adjustMoodScore(1);
+      showFeedback('😐 She accepts it. +1', '#f59e0b');
+    } else {
+      showFeedback('😒 Thrown back at you!', '#ef4444');
+    }
+  };
+
+  const handleGirlCompliment = () => {
+    const result = recordGirlInteraction('compliment');
+    if (!result.allowed) {
+      showFeedback("She's had enough compliments today!", 'var(--text-muted)');
+      return;
+    }
+    if (moodTier === 'sunshine' || moodTier === 'balanced') {
+      adjustMoodScore(1);
+      showFeedback('💬 She blushes! +1', '#ff9999');
+    } else if (moodTier === 'sideeye') {
+      showFeedback('📚 Side-eye. She keeps reading.', 'var(--text-muted)');
+    } else {
+      showFeedback('💅 She points at your streak...', '#ef4444');
+    }
+  };
+
+  // Override moodTier for cat sprite: use box if in box mode
+  const catEffectiveMood = catInBox ? moodTier : moodTier;
 
   return (
     <div className="flex flex-col items-center">
@@ -85,6 +153,7 @@ export function TamagotchiScreen() {
       <div className="mb-2">
         <span className="font-pixel text-[8px]" style={{ color: 'var(--text-muted)' }}>
           {tierName.toUpperCase()}
+          {catInBox && ' · 📦 BOX MODE'}
         </span>
       </div>
 
@@ -97,7 +166,7 @@ export function TamagotchiScreen() {
           <div className="flex-1 flex items-center justify-center relative">
             <PixelCharacter
               mode={settings.characterMode}
-              moodTier={moodTier}
+              moodTier={catBoxDismissed ? 'sideeye' : moodTier}
               animationLevel={settings.animationLevel}
               onInteract={handleInteract}
             />
@@ -135,11 +204,24 @@ export function TamagotchiScreen() {
 
       {/* Mini-game buttons */}
       <div className="flex flex-wrap gap-1.5 justify-center mt-3 w-full max-w-[280px]">
-        {isCat ? (
+        {isGirl ? (
           <>
-            <MiniBtn emoji="🐭" label="MOUSE" badge={`${3 - u.play}/3`} disabled={u.play >= 3} onClick={() => handleGame('play')} />
-            <MiniBtn emoji="🍣" label="TREAT" badge={`${3 - u.feed}/3`} disabled={u.feed >= 3} onClick={() => handleGame('feed')} />
-            <MiniBtn emoji="🫃" label="BELLY?" onClick={handleBellyRub} />
+            <MiniBtn emoji="🎁" label="GIFT" badge={u.giftGiven ? '✓' : '1×'} disabled={u.giftGiven} onClick={handleGirlGift} />
+            <MiniBtn emoji="💬" label="COMPLIMENT" badge={`${3 - u.complimentCount}/3`} disabled={u.complimentCount >= 3} onClick={handleGirlCompliment} />
+            <MiniBtn emoji="💤" label="SLEEP" badge={u.slept ? '✓' : '1×'} disabled={u.slept} onClick={() => handleGame('sleep')} />
+          </>
+        ) : isCat ? (
+          <>
+            <MiniBtn
+              emoji="🐭"
+              label={catInBox ? 'LURE' : 'MOUSE'}
+              badge={`${3 - u.play}/3`}
+              disabled={u.play >= 3}
+              onClick={handleMouseToy}
+              highlight={catInBox ? '#f59e0b40' : undefined}
+            />
+            <MiniBtn emoji="🍣" label="TREAT" badge={`${3 - u.feed}/3`} disabled={u.feed >= 3 || catInBox} onClick={() => handleGame('feed')} />
+            <MiniBtn emoji="🫃" label="BELLY?" disabled={catInBox} onClick={handleBellyRub} />
             <MiniBtn emoji="💤" label="SLEEP" badge={u.slept ? '✓' : '1×'} disabled={u.slept} onClick={() => handleGame('sleep')} />
           </>
         ) : (
@@ -151,18 +233,26 @@ export function TamagotchiScreen() {
           </>
         )}
       </div>
+
+      {/* Cat box hint */}
+      {catInBox && (
+        <p className="mt-2 font-pixel text-center" style={{ fontSize: '6px', color: 'var(--text-muted)' }}>
+          🐱 She's in the box. Use LURE 3× to coax her out.
+        </p>
+      )}
     </div>
   );
 }
 
 function MiniBtn({
-  emoji, label, badge, disabled, onClick,
+  emoji, label, badge, disabled, onClick, highlight,
 }: {
   emoji: string;
   label: string;
   badge?: string;
   disabled?: boolean;
   onClick: () => void;
+  highlight?: string;
 }) {
   return (
     <button
@@ -170,8 +260,8 @@ function MiniBtn({
       disabled={disabled}
       className="flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl transition-all active:scale-95 disabled:opacity-35"
       style={{
-        backgroundColor: 'var(--shell)',
-        border: '1px solid var(--border)',
+        backgroundColor: highlight || 'var(--shell)',
+        border: `1px solid ${highlight ? '#f59e0b' : 'var(--border)'}`,
         minWidth: '58px',
       }}
     >

@@ -107,9 +107,24 @@ export default function SettingsPage() {
     setShowClearChatsConfirm(false);
   };
 
+  // Auto-select female voice when language changes or voices load
+  useEffect(() => {
+    if (!voices.length) return;
+    const lang = settings.language.split('-')[0];
+    const langVoices = voices.filter((v) => v.lang.toLowerCase().startsWith(lang));
+    if (!langVoices.length) return;
+    const femaleKws = ['female', 'woman', 'zira', 'samantha', 'karen', 'moira', 'tessa', 'milena', 'alice', 'amelie', 'petra', 'monica', 'f '];
+    const best =
+      langVoices.find((v) => femaleKws.some((k) => v.name.toLowerCase().includes(k))) ??
+      langVoices[0];
+    if (!settings.selectedVoiceName) {
+      updateSettings({ selectedVoiceName: best.name });
+    }
+  }, [voices, settings.language]); // eslint-disable-line
+
   // Sync language with i18n
   const handleLanguageChange = (lang: Language) => {
-    updateSettings({ language: lang });
+    updateSettings({ language: lang, selectedVoiceName: undefined }); // reset so auto-select fires
     i18n.changeLanguage(lang);
   };
 
@@ -335,6 +350,32 @@ export default function SettingsPage() {
                   }}
                 />
               </SettingsSection>
+
+              {/* Push notifications */}
+              <SettingsSection title={t('settings.notifications')}>
+                <ToggleRow
+                  label={t('settings.enableNotifications')}
+                  value={settings.notificationsEnabled}
+                  onChange={async (v) => {
+                    if (v && 'Notification' in window) {
+                      const perm = await Notification.requestPermission();
+                      updateSettings({ notificationsEnabled: perm === 'granted' });
+                    } else {
+                      updateSettings({ notificationsEnabled: v });
+                    }
+                  }}
+                />
+                {settings.notificationsEnabled && (
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                    Morning alarm set for {settings.wakeUpTime}. Install as PWA for background alerts.
+                  </p>
+                )}
+                {!settings.notificationsEnabled && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied' && (
+                  <p className="text-xs mt-1" style={{ color: '#ef4444' }}>
+                    Notifications blocked in browser. Enable them in your browser settings first.
+                  </p>
+                )}
+              </SettingsSection>
             </div>
           )}
 
@@ -426,11 +467,23 @@ export default function SettingsPage() {
                         }}
                       >
                         <option value="">Default voice</option>
-                        {voices.map((v) => (
-                          <option key={v.name} value={v.name}>
-                            {v.name} ({v.lang})
-                          </option>
-                        ))}
+                        {(() => {
+                          const lang = settings.language.split('-')[0];
+                          const femaleKws = ['female', 'woman', 'zira', 'samantha', 'karen', 'moira', 'tessa', 'milena', 'alice', 'amelie', 'petra', 'monica'];
+                          const sorted = [...voices]
+                            .filter((v) => v.lang.toLowerCase().startsWith(lang))
+                            .sort((a, b) => {
+                              const aF = femaleKws.some((k) => a.name.toLowerCase().includes(k));
+                              const bF = femaleKws.some((k) => b.name.toLowerCase().includes(k));
+                              return (bF ? 1 : 0) - (aF ? 1 : 0);
+                            });
+                          const rest = voices.filter((v) => !v.lang.toLowerCase().startsWith(lang));
+                          return [...sorted, ...rest].map((v) => (
+                            <option key={v.name} value={v.name}>
+                              {v.name} ({v.lang})
+                            </option>
+                          ));
+                        })()}
                       </select>
                       {settings.language === 'bg' && (
                         <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>

@@ -541,15 +541,28 @@ export default function ChatPage() {
 
             {/* Voice output toggle */}
             <button
-              onClick={() => useVictoriaStore.getState().updateSettings({ voiceEnabled: !settings.voiceEnabled })}
-              className="flex-shrink-0 p-2 rounded-xl transition-all"
+              onClick={() => {
+                if (isSpeaking) {
+                  stopSpeaking();
+                  return;
+                }
+                const nowEnabled = !settings.voiceEnabled;
+                useVictoriaStore.getState().updateSettings({ voiceEnabled: nowEnabled });
+                if (nowEnabled) {
+                  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+                  if (lastAssistant) speak(lastAssistant.content);
+                } else {
+                  stopSpeaking();
+                }
+              }}
+              className={`flex-shrink-0 p-2 rounded-xl transition-all ${isSpeaking ? 'animate-pulse' : ''}`}
               style={{
-                backgroundColor: settings.voiceEnabled ? 'var(--accent)' : 'var(--shell)',
+                backgroundColor: isSpeaking ? 'var(--accent)' : settings.voiceEnabled ? 'var(--accent)' : 'var(--shell)',
                 color: settings.voiceEnabled ? 'white' : 'var(--text-muted)',
               }}
-              title={settings.voiceEnabled ? 'Mute voice' : 'Enable voice'}
+              title={isSpeaking ? 'Stop speaking' : settings.voiceEnabled ? 'Mute voice' : 'Enable voice'}
             >
-              {settings.voiceEnabled ? '🔊' : '🔇'}
+              {isSpeaking ? '🔉' : settings.voiceEnabled ? '🔊' : '🔇'}
             </button>
 
             {/* Mic button */}
