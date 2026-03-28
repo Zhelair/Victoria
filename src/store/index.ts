@@ -16,6 +16,21 @@ import {
   getMoodTier,
 } from '@/types';
 
+function mergeScoringRules(rules?: ScoringRule[]) {
+  if (!rules?.length) return DEFAULT_SCORING_RULES;
+
+  const defaultsById = new Map(DEFAULT_SCORING_RULES.map((rule) => [rule.id, rule]));
+  const merged = rules.map((rule) => {
+    const defaultRule = defaultsById.get(rule.id);
+    return defaultRule ? { ...defaultRule, ...rule } : rule;
+  });
+
+  const existingIds = new Set(merged.map((rule) => rule.id));
+  const missingDefaults = DEFAULT_SCORING_RULES.filter((rule) => !existingIds.has(rule.id));
+
+  return [...merged, ...missingDefaults];
+}
+
 interface VictoriaState {
   // Hydration flag
   _hasHydrated: boolean;
@@ -225,6 +240,9 @@ export const useVictoriaStore = create<VictoriaState>()(
             ...currentState.settings,
             ...(persisted?.settings ?? {}),
           },
+          scoringRules: mergeScoringRules(
+            persisted?.scoringRules ?? currentState.scoringRules
+          ),
         };
       },
       onRehydrateStorage: () => (_state, _error) => {

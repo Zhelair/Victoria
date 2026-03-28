@@ -4,33 +4,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { v4 as uuidv4 } from 'uuid';
 import { useVictoriaStore } from '@/store';
 import { TamagotchiScreen } from '@/components/home/TamagotchiScreen';
 import { AppShell } from '@/components/layout/AppShell';
 import { getTodayDateKey, pickRandom } from '@/lib/utils';
 import { getActivePlanDayNumber, getMorningSpark } from '@/lib/morning';
+import { applyScoringRule, getPinnedHomeRules, getRuleScoreDelta } from '@/lib/scoring';
 import { DEFAULT_SETTINGS, getMoodTier } from '@/types';
 import { db } from '@/lib/db';
-
-const FEED_ACTIONS = [
-  { key: 'healthy_meal', labelKey: 'feed.healthyMeal', emoji: '🥗', delta: 8 },
-  { key: 'meditation', labelKey: 'feed.meditation', emoji: '🧘', delta: 7 },
-  { key: 'slept_early', labelKey: 'feed.sleptEarly', emoji: '😴', delta: 7 },
-  { key: 'no_beer', labelKey: 'feed.noBeer', emoji: '🚫🍺', delta: 10 },
-];
-
-const ACT_ACTIONS = [
-  { key: 'did_workout', labelKey: 'act.pushups', emoji: '💪', delta: 10 },
-  { key: 'outdoor_workout', labelKey: 'act.swim', emoji: '🏊', delta: 20 },
-  { key: 'long_walk', labelKey: 'act.walk', emoji: '🚶', delta: 12 },
-  { key: 'job_application', labelKey: 'act.jobApp', emoji: '📨', delta: 20 },
-  { key: 'met_friend', labelKey: 'act.metFriend', emoji: '👥', delta: 15 },
-  { key: 'went_out', labelKey: 'act.wentOut', emoji: '🏛️', delta: 18 },
-  { key: 'cooked', labelKey: 'act.cooked', emoji: '🍳', delta: 15 },
-  { key: 'cleaned_house', labelKey: 'act.cleaned', emoji: '🧹', delta: 12 },
-  { key: 'did_laundry', labelKey: 'act.laundry', emoji: '👕', delta: 8 },
-];
 
 export default function HomePage() {
   const router = useRouter();
@@ -38,7 +19,7 @@ export default function HomePage() {
   const hasHydrated = useVictoriaStore((s) => s._hasHydrated);
   const settings = useVictoriaStore((s) => s.settings);
   const moodScore = useVictoriaStore((s) => s.moodScore);
-  const adjustMoodScore = useVictoriaStore((s) => s.adjustMoodScore);
+  const scoringRules = useVictoriaStore((s) => s.scoringRules);
   const streakDays = useVictoriaStore((s) => s.streakDays);
   const setActiveSphere = useVictoriaStore((s) => s.setActiveSphere);
   const [hydrationTimedOut, setHydrationTimedOut] = useState(false);
@@ -56,6 +37,10 @@ export default function HomePage() {
   const activePlan = useLiveQuery(
     () => db.fitnessPlans.filter((plan) => plan.active).first(),
     []
+  );
+  const quickActions = useMemo(
+    () => getPinnedHomeRules(scoringRules),
+    [scoringRules]
   );
 
   useEffect(() => {
@@ -107,20 +92,10 @@ export default function HomePage() {
     ? pickRandom(greetings).replace('{{name}}', settings.userName || 'friend')
     : '';
 
-  const handleAction = async (key: string, delta: number, label: string) => {
-    adjustMoodScore(delta);
-    try {
-      const today = getTodayDateKey();
-      await db.logEntries.add({
-        id: uuidv4(),
-        date: today,
-        timestamp: Date.now(),
-        category: key,
-        value: label,
-      });
-    } catch {
-      // non-critical
-    }
+  const handleRuleAction = async (ruleId: string) => {
+    await applyScoringRule(ruleId, {
+      source: 'rule',
+    });
   };
 
   if (!hasHydrated) {
@@ -253,20 +228,9 @@ export default function HomePage() {
           </div>
         )}
 
-        <ActionSection
-          title={t('home.feed')}
-          actions={FEED_ACTIONS}
-          color="var(--accent)"
-          onAction={handleAction}
-          t={t}
-        />
-
-        <ActionSection
-          title={t('home.act')}
-          actions={ACT_ACTIONS}
-          color="#22c55e"
-          onAction={handleAction}
-          t={t}
+        <PinnedRuleSection
+          rules={quickActions}
+          onAction={handleRuleAction}
         />
 
         <TodayTasksWidget />
@@ -275,29 +239,38 @@ export default function HomePage() {
   );
 }
 
-function ActionSection({
-  title,
-  actions,
-  color,
+function PinnedRuleSection({
+  rules,
   onAction,
-  t,
 }: {
-  title: string;
-  actions: { key: string; labelKey: string; emoji: string; delta: number }[];
-  color: string;
-  onAction: (key: string, delta: number, label: string) => void;
-  t: (key: string) => string;
+  rules: ReturnType<typeof getPinnedHomeRules>;
+  onAction: (ruleId: string) => void;
 }) {
+  if (rules.length === 0) {
+    return (
+      <div className="card p-3">
+        <h3 className="font-pixel text-[8px] mb-2" style={{ color: 'var(--accent)' }}>
+          Quick Actions
+        </h3>
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          Pin up to 5 rules in Settings to show your favorite actions here.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="card p-3">
-      <h3 className="font-pixel text-[8px] mb-3" style={{ color }}>
-        {title}
+      <h3 className="font-pixel text-[8px] mb-3" style={{ color: 'var(--accent)' }}>
+        Quick Actions
       </h3>
       <div className="flex flex-wrap gap-2">
-        {actions.map((action) => (
+        {rules.map((rule) => {
+          const delta = getRuleScoreDelta(rule);
+          return (
           <button
-            key={action.key}
-            onClick={() => onAction(action.key, action.delta, t(action.labelKey))}
+            key={rule.id}
+            onClick={() => onAction(rule.id)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all active:scale-95"
             style={{
               backgroundColor: 'var(--shell)',
@@ -305,16 +278,17 @@ function ActionSection({
               border: '1px solid var(--border)',
             }}
           >
-            <span>{action.emoji}</span>
-            <span className="font-pixel text-[7px]">{t(action.labelKey)}</span>
+            <span>{rule.emoji}</span>
+            <span className="font-pixel text-[7px]">{rule.label}</span>
             <span
               className="font-pixel text-[6px] ml-0.5"
-              style={{ color: action.delta > 0 ? '#22c55e' : '#ef4444' }}
+              style={{ color: delta > 0 ? '#22c55e' : '#ef4444' }}
             >
-              +{action.delta}
+              {delta > 0 ? `+${delta}` : `${delta}`}
             </span>
           </button>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

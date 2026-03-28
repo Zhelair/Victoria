@@ -7,6 +7,7 @@ import { useVictoriaStore } from '@/store';
 import { AppShell } from '@/components/layout/AppShell';
 import { db } from '@/lib/db';
 import { buildCompanionContext } from '@/lib/companion-context';
+import { applyScoringRule, detectScoringRuleFromText, getRuleScoreDelta } from '@/lib/scoring';
 import { extractFileContent, formatFileSize, SUPPORTED_FILE_TYPES, MAX_FILE_SIZE, truncate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { getMoodTier } from '@/types';
@@ -17,6 +18,7 @@ export default function ChatPage() {
   const { t } = useTranslation();
   const settings = useVictoriaStore((s) => s.settings);
   const moodScore = useVictoriaStore((s) => s.moodScore);
+  const scoringRules = useVictoriaStore((s) => s.scoringRules);
   const activeSphere = useVictoriaStore((s) => s.activeSphere);
   const setActiveSphere = useVictoriaStore((s) => s.setActiveSphere);
   const tier = useVictoriaStore((s) => s.tier);
@@ -32,6 +34,14 @@ export default function ChatPage() {
   const [attachedFile, setAttachedFile] = useState<{ name: string; text: string; size: number } | null>(null);
   const [isListening, setIsListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [pendingRuleSuggestion, setPendingRuleSuggestion] = useState<{
+    ruleId: string;
+    label: string;
+    delta: number;
+    matchedPhrase: string;
+    sourceText: string;
+  } | null>(null);
+  const [ruleSuggestionFeedback, setRuleSuggestionFeedback] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -83,6 +93,17 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    setPendingRuleSuggestion(null);
+    setRuleSuggestionFeedback(null);
+  }, [activeSphere, activeThreadId]);
+
+  useEffect(() => {
+    if (!ruleSuggestionFeedback) return;
+    const timeout = window.setTimeout(() => setRuleSuggestionFeedback(null), 2500);
+    return () => window.clearTimeout(timeout);
+  }, [ruleSuggestionFeedback]);
 
   useEffect(() => {
     if (starterAppliedRef.current) return;
@@ -179,9 +200,15 @@ export default function ChatPage() {
       setActiveThreadId(thread.id);
     }
 
+    const typedInput = input.trim();
     const userContent = attachedFile
       ? `${input}\n\n[File: ${attachedFile.name}]\n${attachedFile.text.slice(0, 3000)}`
       : input;
+
+    const detectedRule =
+      settings.chatScoreConfirmationsEnabled && typedInput
+        ? detectScoringRuleFromText(typedInput, scoringRules)
+        : null;
 
     const userMsg: ChatMessage = {
       id: uuidv4(),
@@ -197,6 +224,19 @@ export default function ChatPage() {
     setInput('');
     setAttachedFile(null);
     setIsStreaming(true);
+    setRuleSuggestionFeedback(null);
+
+    if (detectedRule) {
+      setPendingRuleSuggestion({
+        ruleId: detectedRule.rule.id,
+        label: detectedRule.rule.label,
+        delta: getRuleScoreDelta(detectedRule.rule),
+        matchedPhrase: detectedRule.matchedPhrase,
+        sourceText: typedInput,
+      });
+    } else {
+      setPendingRuleSuggestion(null);
+    }
 
     // Update message count
     useVictoriaStore.getState().updateSettings({
@@ -316,6 +356,32 @@ export default function ChatPage() {
     } finally {
       setIsStreaming(false);
     }
+  };
+
+  const applyPendingRuleSuggestion = async () => {
+    if (!pendingRuleSuggestion) return;
+
+    const result = await applyScoringRule(pendingRuleSuggestion.ruleId, {
+      source: 'chat-confirmation',
+      note: `Confirmed from chat: ${pendingRuleSuggestion.sourceText}`,
+      value: pendingRuleSuggestion.sourceText,
+    });
+
+    if (!result.ok) {
+      setRuleSuggestionFeedback('That rule is no longer available.');
+      setPendingRuleSuggestion(null);
+      return;
+    }
+
+    setRuleSuggestionFeedback(
+      `${result.delta > 0 ? '+' : ''}${result.delta} mood applied for "${result.rule.label}".`
+    );
+    setPendingRuleSuggestion(null);
+  };
+
+  const dismissPendingRuleSuggestion = () => {
+    setPendingRuleSuggestion(null);
+    setRuleSuggestionFeedback('Score suggestion ignored.');
   };
 
   const speak = (text: string) => {
@@ -557,6 +623,58 @@ export default function ChatPage() {
             >
               ✕
             </button>
+          </div>
+        )}
+
+        {(pendingRuleSuggestion || ruleSuggestionFeedback) && (
+          <div
+            className="mx-3 mb-2 p-3 rounded-2xl space-y-2"
+            style={{
+              backgroundColor: 'var(--card-bg)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            {pendingRuleSuggestion && (
+              <>
+                <div className="space-y-1">
+                  <p className="font-pixel text-[7px]" style={{ color: 'var(--accent)' }}>
+                    Score Suggestion
+                  </p>
+                  <p className="text-xs leading-relaxed" style={{ color: 'var(--text)' }}>
+                    Victoria noticed the phrase {pendingRuleSuggestion.matchedPhrase} and can apply{' '}
+                    <span className="font-semibold">{pendingRuleSuggestion.label}</span>{' '}
+                    ({pendingRuleSuggestion.delta > 0 ? '+' : ''}
+                    {pendingRuleSuggestion.delta}).
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={applyPendingRuleSuggestion}
+                    className="flex-1 py-2 rounded-xl font-pixel text-[7px] text-white transition-all active:scale-95"
+                    style={{ backgroundColor: 'var(--accent)' }}
+                  >
+                    Apply
+                  </button>
+                  <button
+                    onClick={dismissPendingRuleSuggestion}
+                    className="px-3 py-2 rounded-xl font-pixel text-[7px] transition-all active:scale-95"
+                    style={{
+                      backgroundColor: 'var(--shell)',
+                      color: 'var(--text-muted)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    Ignore
+                  </button>
+                </div>
+              </>
+            )}
+
+            {!pendingRuleSuggestion && ruleSuggestionFeedback && (
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                {ruleSuggestionFeedback}
+              </p>
+            )}
           </div>
         )}
 
