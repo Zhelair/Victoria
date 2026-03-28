@@ -31,7 +31,8 @@ function nextPlanLine(plan: { title: string; startDate: string; days: Array<{ da
     ? ` Exercises: ${nextDay.exercises.slice(0, 4).join(', ')}.`
     : '';
   const notes = nextDay.notes ? ` Notes: ${nextDay.notes}.` : '';
-  return `${plan.title} - next plan day is Day ${nextDay.day} (${nextDay.workoutType}).${exercises}${notes}`;
+  const title = 'title' in nextDay && typeof nextDay.title === 'string' ? ` ${nextDay.title}.` : '';
+  return `${plan.title} - next plan day is Day ${nextDay.day} (${nextDay.workoutType}).${title}${exercises}${notes}`;
 }
 
 export async function buildCompanionContext({
@@ -93,6 +94,11 @@ export async function buildCompanionContext({
   if (activePlan) {
     const completedDays = activePlan.days.filter((day) => day.done).length;
     lines.push(`Fitness plan progress: ${activePlan.title} started ${activePlan.startDate}, ${completedDays}/${activePlan.days.length} days done.`);
+    if (activePlan.profile) {
+      lines.push(
+        `Fitness profile: ${activePlan.profile.environment} training, ${activePlan.profile.intensity} intensity, goal ${activePlan.profile.goal}, cardio ${activePlan.profile.cardioPreference}, ${activePlan.profile.workoutsPerWeek} main sessions per week.`
+      );
+    }
     const nextLine = nextPlanLine(activePlan);
     if (nextLine) {
       lines.push(nextLine);

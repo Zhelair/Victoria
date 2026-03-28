@@ -7,8 +7,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { useVictoriaStore } from '@/store';
 import { PixelCharacter } from '@/components/home/PixelCharacter';
 import { db } from '@/lib/db';
-import { cn, getTodayDateKey } from '@/lib/utils';
-import type { FitnessDay, FitnessPlan, Goal } from '@/types';
+import { createFitnessPlan, DEFAULT_FITNESS_PROFILE } from '@/lib/fitness-plan';
+import { cn } from '@/lib/utils';
+import type { Goal } from '@/types';
 
 type Step = 'welcome' | 'name' | 'goal' | 'wakeTime' | 'done';
 
@@ -60,21 +61,13 @@ export default function OnboardingPage() {
     }
 
     if (!existingPlan && (focus === 'fitness' || focus === 'both')) {
-      const days: FitnessDay[] = Array.from({ length: 14 }, (_, i) => ({
-        day: i + 1,
-        workoutType: i % 7 === 0 || i % 7 === 3 ? 'rest' : 'home',
-        exercises: [],
-        done: false,
-      }));
-
-      const starterPlan: FitnessPlan = {
-        id: uuidv4(),
-        title: 'Starter 2 Weeks',
-        createdAt: Date.now(),
-        startDate: getTodayDateKey(),
-        days,
-        active: true,
-      };
+      const starterPlan = createFitnessPlan(
+        {
+          ...DEFAULT_FITNESS_PROFILE,
+          goal: focus === 'both' ? 'consistency' : 'energy',
+        },
+        'Starter 2 Weeks'
+      );
 
       await db.fitnessPlans.add(starterPlan);
     }
