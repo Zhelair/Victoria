@@ -16,7 +16,6 @@ export default function SettingsPage() {
   const scoringRules = useVictoriaStore((s) => s.scoringRules);
   const updateScoringRule = useVictoriaStore((s) => s.updateScoringRule);
   const deleteScoringRule = useVictoriaStore((s) => s.deleteScoringRule);
-  const addScoringRule = useVictoriaStore((s) => s.addScoringRule);
   const tier = useVictoriaStore((s) => s.tier);
 
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -420,6 +419,84 @@ export default function SettingsPage() {
                     Notifications blocked in browser. Enable them in your browser settings first.
                   </p>
                 )}
+              </SettingsSection>
+
+              <SettingsSection title="Morning Routine">
+                <ToggleRow
+                  label="Show morning briefing on Home"
+                  value={settings.morningBriefingEnabled ?? true}
+                  onChange={(v) => updateSettings({ morningBriefingEnabled: v })}
+                />
+
+                <div className="space-y-2">
+                  <label className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Location
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.morningLocation ?? ''}
+                    onChange={(e) => updateSettings({ morningLocation: e.target.value })}
+                    placeholder="Sofia, Bulgaria"
+                    className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+                    style={{
+                      backgroundColor: 'var(--shell)',
+                      color: 'var(--text)',
+                      border: '1px solid var(--border)',
+                    }}
+                  />
+                </div>
+
+                <ToggleRow
+                  label="Include weather preference"
+                  value={settings.morningWeatherEnabled ?? true}
+                  onChange={(v) => updateSettings({ morningWeatherEnabled: v })}
+                />
+
+                <ToggleRow
+                  label="Include news preference"
+                  value={settings.morningNewsEnabled ?? false}
+                  onChange={(v) => updateSettings({ morningNewsEnabled: v })}
+                />
+
+                <div className="space-y-2">
+                  <label className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    News topics
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.morningNewsTopics ?? ''}
+                    onChange={(e) => updateSettings({ morningNewsTopics: e.target.value })}
+                    placeholder="AI, tech, politics"
+                    className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+                    style={{
+                      backgroundColor: 'var(--shell)',
+                      color: 'var(--text)',
+                      border: '1px solid var(--border)',
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    Fact categories
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.morningFactCategories ?? ''}
+                    onChange={(e) => updateSettings({ morningFactCategories: e.target.value })}
+                    placeholder="science, history"
+                    className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+                    style={{
+                      backgroundColor: 'var(--shell)',
+                      color: 'var(--text)',
+                      border: '1px solid var(--border)',
+                    }}
+                  />
+                </div>
+
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Saved now for your morning flow. Live weather and news can plug into these preferences next.
+                </p>
               </SettingsSection>
             </div>
           )}

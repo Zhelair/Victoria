@@ -46,10 +46,17 @@ export function TamagotchiScreen() {
   const snd = settings.soundsEnabled;
 
   const today = new Date().toISOString().split('T')[0];
-  const u = {
-    feed: 0, play: 0, cleaned: false, slept: false, giftGiven: false, complimentCount: 0,
-    ...(miniGameUsage.date === today ? miniGameUsage : { date: today }),
-  };
+  const u = miniGameUsage.date === today
+    ? miniGameUsage
+    : {
+        date: today,
+        feed: 0,
+        play: 0,
+        cleaned: false,
+        slept: false,
+        giftGiven: false,
+        complimentCount: 0,
+      };
 
   const catInBox = isCat && (moodTier === 'icequeen' || moodTier === 'dark') && !catBoxDismissed;
 

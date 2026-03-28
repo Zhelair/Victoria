@@ -229,6 +229,12 @@ export interface AppSettings {
   tamaShellColor?: string; // custom shell color (hex)
   tamaScreenColor?: string; // custom screen color (hex)
   soundsEnabled: boolean;
+  morningBriefingEnabled: boolean;
+  morningLocation: string;
+  morningWeatherEnabled: boolean;
+  morningNewsEnabled: boolean;
+  morningNewsTopics: string;
+  morningFactCategories: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -252,4 +258,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   firstOpenDate: new Date().toISOString().split('T')[0],
   messageCount: 0,
   soundsEnabled: false,
+  morningBriefingEnabled: true,
+  morningLocation: 'Sofia, Bulgaria',
+  morningWeatherEnabled: true,
+  morningNewsEnabled: false,
+  morningNewsTopics: 'AI, tech',
+  morningFactCategories: 'science, history',
 };

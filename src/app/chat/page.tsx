@@ -36,6 +36,7 @@ export default function ChatPage() {
   const abortRef = useRef<AbortController | null>(null);
   const recognitionRef = useRef<any>(null);
   const skipLoadRef = useRef(false);
+  const starterAppliedRef = useRef(false);
   const [hasSpeechSupport, setHasSpeechSupport] = useState(false);
 
   // Detect speech support client-side (window is undefined during SSR)
@@ -48,8 +49,20 @@ export default function ChatPage() {
 
   // Load threads for active sphere
   useEffect(() => {
-    loadThreads();
-  }, [activeSphere]);
+    const run = async () => {
+      const list = await db.chatThreads
+        .where('sphere')
+        .equals(activeSphere)
+        .reverse()
+        .sortBy('updatedAt');
+      setThreads(list);
+      if (list.length > 0 && !activeThreadId) {
+        setActiveThreadId(list[0].id);
+      }
+    };
+
+    run();
+  }, [activeSphere, activeThreadId]);
 
   // Load messages when thread changes
   useEffect(() => {
@@ -67,6 +80,23 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (starterAppliedRef.current) return;
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('starter') !== 'morning') return;
+
+    starterAppliedRef.current = true;
+    if (activeSphere !== 'daily') {
+      setActiveSphere('daily');
+    }
+    setInput((prev) =>
+      prev ||
+      'Good morning, Victoria. Give me my morning briefing, help me organize today, and suggest the best first task.'
+    );
+  }, [activeSphere, setActiveSphere]);
 
   const loadThreads = async () => {
     const list = await db.chatThreads
@@ -551,20 +581,25 @@ export default function ChatPage() {
               disabled={isStreaming}
             />
 
-            {/* Voice output toggle */}
+            {/* Voice output / replay */}
             <button
               onClick={() => {
                 if (isSpeaking) {
                   stopSpeaking();
                   return;
                 }
-                const nowEnabled = !settings.voiceEnabled;
-                useVictoriaStore.getState().updateSettings({ voiceEnabled: nowEnabled });
-                if (nowEnabled) {
-                  const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
-                  if (lastAssistant) speak(lastAssistant.content);
-                } else {
-                  stopSpeaking();
+
+                const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+                if (!settings.voiceEnabled) {
+                  useVictoriaStore.getState().updateSettings({ voiceEnabled: true });
+                  if (lastAssistant) {
+                    speak(lastAssistant.content);
+                  }
+                  return;
+                }
+
+                if (lastAssistant) {
+                  speak(lastAssistant.content);
                 }
               }}
               className={`flex-shrink-0 p-2 rounded-xl transition-all ${isSpeaking ? 'animate-pulse' : ''}`}
@@ -572,7 +607,7 @@ export default function ChatPage() {
                 backgroundColor: isSpeaking ? 'var(--accent)' : settings.voiceEnabled ? 'var(--accent)' : 'var(--shell)',
                 color: settings.voiceEnabled ? 'white' : 'var(--text-muted)',
               }}
-              title={isSpeaking ? 'Stop speaking' : settings.voiceEnabled ? 'Mute voice' : 'Enable voice'}
+              title={isSpeaking ? 'Stop speaking' : settings.voiceEnabled ? 'Replay last reply' : 'Enable voice'}
             >
               {isSpeaking ? '🔉' : settings.voiceEnabled ? '🔊' : '🔇'}
             </button>
@@ -614,7 +649,6 @@ export default function ChatPage() {
 }
 
 function MessageBubble({ message }: { message: ChatMessage }) {
-  const { t } = useTranslation();
   const isUser = message.role === 'user';
 
   return (
