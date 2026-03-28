@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { v4 as uuidv4 } from 'uuid';
 import { useVictoriaStore } from '@/store';
 import { AppShell } from '@/components/layout/AppShell';
 import { db } from '@/lib/db';
+import { MAX_HOME_PINNED_RULES } from '@/lib/scoring';
 import { cn, getTodayDateKey } from '@/lib/utils';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import type { ScoringRule, Theme, Language, CharacterMode, PersonalityMode, SaveSlot, AppSnapshot } from '@/types';
@@ -14,6 +16,7 @@ export default function SettingsPage() {
   const settings = useVictoriaStore((s) => s.settings);
   const updateSettings = useVictoriaStore((s) => s.updateSettings);
   const scoringRules = useVictoriaStore((s) => s.scoringRules);
+  const addScoringRule = useVictoriaStore((s) => s.addScoringRule);
   const updateScoringRule = useVictoriaStore((s) => s.updateScoringRule);
   const deleteScoringRule = useVictoriaStore((s) => s.deleteScoringRule);
   const tier = useVictoriaStore((s) => s.tier);
@@ -30,6 +33,13 @@ export default function SettingsPage() {
   const [saveSlots, setSaveSlots] = useState<(SaveSlot | null)[]>([null, null, null]);
   const [slotToDelete, setSlotToDelete] = useState<number | null>(null);
   const [showClearChatsConfirm, setShowClearChatsConfirm] = useState(false);
+  const [newRuleLabel, setNewRuleLabel] = useState('');
+  const [newRuleEmoji, setNewRuleEmoji] = useState('✨');
+  const [newRulePoints, setNewRulePoints] = useState(10);
+  const [newRuleType, setNewRuleType] = useState<ScoringRule['type']>('heal');
+  const [newRuleCategory, setNewRuleCategory] = useState<ScoringRule['category']>('custom');
+  const [newRulePinned, setNewRulePinned] = useState(false);
+  const [newRuleTriggers, setNewRuleTriggers] = useState('');
 
   // Load voices
   useEffect(() => {
@@ -208,6 +218,50 @@ export default function SettingsPage() {
     } else {
       setPassphraseError(true);
     }
+  };
+
+  const pinnedRuleCount = scoringRules.filter((rule) => rule.enabled && rule.pinnedToHome).length;
+
+  const togglePinnedRule = (rule: ScoringRule) => {
+    if (!rule.pinnedToHome && pinnedRuleCount >= MAX_HOME_PINNED_RULES) {
+      alert(`You can pin up to ${MAX_HOME_PINNED_RULES} Home actions.`);
+      return;
+    }
+
+    updateScoringRule(rule.id, { pinnedToHome: !rule.pinnedToHome });
+  };
+
+  const createCustomRule = () => {
+    const label = newRuleLabel.trim();
+    if (!label) return;
+
+    if (newRulePinned && pinnedRuleCount >= MAX_HOME_PINNED_RULES) {
+      alert(`You can pin up to ${MAX_HOME_PINNED_RULES} Home actions.`);
+      return;
+    }
+
+    addScoringRule({
+      id: uuidv4(),
+      label,
+      emoji: newRuleEmoji.trim() || '✨',
+      type: newRuleType,
+      points: Math.max(1, Math.round(Math.abs(newRulePoints))),
+      enabled: true,
+      category: newRuleCategory,
+      pinnedToHome: newRulePinned,
+      triggerPhrases: newRuleTriggers
+        .split(',')
+        .map((phrase) => phrase.trim())
+        .filter(Boolean),
+    });
+
+    setNewRuleLabel('');
+    setNewRuleEmoji('✨');
+    setNewRulePoints(10);
+    setNewRuleType('heal');
+    setNewRuleCategory('custom');
+    setNewRulePinned(false);
+    setNewRuleTriggers('');
   };
 
   const sections = [
@@ -640,6 +694,30 @@ export default function SettingsPage() {
           {/* ─── Scoring Rules ───────────────────────────────────────── */}
           {activeSection === 'rules' && (
             <div className="space-y-3">
+              <SettingsSection title="Rule Automation">
+                <ToggleRow
+                  label="Suggest score changes from chat"
+                  value={settings.chatScoreConfirmationsEnabled}
+                  onChange={(v) => updateSettings({ chatScoreConfirmationsEnabled: v })}
+                />
+                <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+                  When Victoria spots a known habit in chat, she can suggest applying that rule with confirmation.
+                </p>
+              </SettingsSection>
+
+              <div className="card p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-pixel text-[8px]" style={{ color: 'var(--accent)' }}>
+                      Home Pins
+                    </h3>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                      {pinnedRuleCount}/{MAX_HOME_PINNED_RULES} rules pinned to Home quick actions.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between">
                 <h3 className="font-pixel text-[8px]" style={{ color: 'var(--text)' }}>
                   {t('settings.damageRules')}
@@ -651,7 +729,8 @@ export default function SettingsPage() {
                   key={rule.id}
                   rule={rule}
                   onToggle={(id) => updateScoringRule(id, { enabled: !rule.enabled })}
-                  onDelete={deleteScoringRule}
+                  onPin={() => togglePinnedRule(rule)}
+                  onDelete={rule.category === 'custom' ? deleteScoringRule : undefined}
                 />
               ))}
 
@@ -664,9 +743,115 @@ export default function SettingsPage() {
                   key={rule.id}
                   rule={rule}
                   onToggle={(id) => updateScoringRule(id, { enabled: !rule.enabled })}
-                  onDelete={deleteScoringRule}
+                  onPin={() => togglePinnedRule(rule)}
+                  onDelete={rule.category === 'custom' ? deleteScoringRule : undefined}
                 />
               ))}
+
+              <SettingsSection title="Add Custom Rule">
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newRuleEmoji}
+                      onChange={(e) => setNewRuleEmoji(e.target.value)}
+                      className="w-16 px-3 py-2 rounded-xl text-sm outline-none text-center"
+                      style={{
+                        backgroundColor: 'var(--shell)',
+                        color: 'var(--text)',
+                        border: '1px solid var(--border)',
+                      }}
+                      maxLength={4}
+                      placeholder="✨"
+                    />
+                    <input
+                      type="text"
+                      value={newRuleLabel}
+                      onChange={(e) => setNewRuleLabel(e.target.value)}
+                      className="flex-1 px-3 py-2 rounded-xl text-sm outline-none"
+                      style={{
+                        backgroundColor: 'var(--shell)',
+                        color: 'var(--text)',
+                        border: '1px solid var(--border)',
+                      }}
+                      placeholder="Rule label"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      value={newRuleType}
+                      onChange={(e) => setNewRuleType(e.target.value as ScoringRule['type'])}
+                      className="px-3 py-2 rounded-xl text-sm outline-none"
+                      style={{
+                        backgroundColor: 'var(--shell)',
+                        color: 'var(--text)',
+                        border: '1px solid var(--border)',
+                      }}
+                    >
+                      <option value="heal">Heal</option>
+                      <option value="damage">Damage</option>
+                    </select>
+                    <input
+                      type="number"
+                      min={1}
+                      value={newRulePoints}
+                      onChange={(e) => setNewRulePoints(Number(e.target.value) || 1)}
+                      className="px-3 py-2 rounded-xl text-sm outline-none"
+                      style={{
+                        backgroundColor: 'var(--shell)',
+                        color: 'var(--text)',
+                        border: '1px solid var(--border)',
+                      }}
+                      placeholder="Points"
+                    />
+                  </div>
+
+                  <select
+                    value={newRuleCategory}
+                    onChange={(e) => setNewRuleCategory(e.target.value as ScoringRule['category'])}
+                    className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+                    style={{
+                      backgroundColor: 'var(--shell)',
+                      color: 'var(--text)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    {(['custom', 'daily', 'diet', 'fitness', 'career', 'social'] as ScoringRule['category'][]).map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+
+                  <input
+                    type="text"
+                    value={newRuleTriggers}
+                    onChange={(e) => setNewRuleTriggers(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+                    style={{
+                      backgroundColor: 'var(--shell)',
+                      color: 'var(--text)',
+                      border: '1px solid var(--border)',
+                    }}
+                    placeholder="Chat trigger phrases, comma separated"
+                  />
+
+                  <ToggleRow
+                    label={`Pin this rule to Home (${pinnedRuleCount}/${MAX_HOME_PINNED_RULES})`}
+                    value={newRulePinned}
+                    onChange={(v) => setNewRulePinned(v)}
+                  />
+
+                  <button
+                    onClick={createCustomRule}
+                    className="w-full py-3 rounded-xl font-pixel text-[8px] text-white transition-all active:scale-95"
+                    style={{ backgroundColor: 'var(--accent)' }}
+                  >
+                    Create custom rule
+                  </button>
+                </div>
+              </SettingsSection>
             </div>
           )}
 
@@ -1003,39 +1188,94 @@ function ToggleRow({
 function RuleRow({
   rule,
   onToggle,
+  onPin,
   onDelete,
 }: {
   rule: ScoringRule;
   onToggle: (id: string) => void;
-  onDelete: (id: string) => void;
+  onPin: () => void;
+  onDelete?: (id: string) => void;
 }) {
   return (
     <div
       className={cn(
-        'flex items-center gap-3 px-3 py-2 rounded-xl transition-all',
+        'px-3 py-3 rounded-xl transition-all space-y-2',
         !rule.enabled ? 'opacity-40' : ''
       )}
       style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border)' }}
     >
-      <span className="text-sm flex-shrink-0">{rule.emoji}</span>
-      <div className="flex-1">
-        <p className="text-xs" style={{ color: 'var(--text)' }}>
-          {rule.label}
-        </p>
-        <p className="font-pixel text-[6px] mt-0.5" style={{ color: rule.type === 'damage' ? '#ef4444' : '#22c55e' }}>
-          {rule.type === 'damage' ? '-' : '+'}{rule.points} pts
-        </p>
+      <div className="flex items-start gap-3">
+        <span className="text-sm flex-shrink-0">{rule.emoji}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs" style={{ color: 'var(--text)' }}>
+            {rule.label}
+          </p>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <p
+              className="font-pixel text-[6px]"
+              style={{ color: rule.type === 'damage' ? '#ef4444' : '#22c55e' }}
+            >
+              {rule.type === 'damage' ? '-' : '+'}{rule.points} pts
+            </p>
+            <span
+              className="font-pixel text-[5px] px-1.5 py-0.5 rounded-full"
+              style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+            >
+              {rule.category}
+            </span>
+            {rule.pinnedToHome && (
+              <span
+                className="font-pixel text-[5px] px-1.5 py-0.5 rounded-full"
+                style={{ backgroundColor: 'rgba(34, 197, 94, 0.12)', color: '#15803d' }}
+              >
+                pinned
+              </span>
+            )}
+          </div>
+          {rule.triggerPhrases?.length ? (
+            <p className="text-[10px] mt-1 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              Chat cues: {rule.triggerPhrases.join(', ')}
+            </p>
+          ) : null}
+        </div>
+        <button
+          onClick={() => onToggle(rule.id)}
+          className="w-10 h-5 rounded-full transition-all relative flex-shrink-0"
+          style={{ backgroundColor: rule.enabled ? (rule.type === 'damage' ? '#ef4444' : '#22c55e') : 'var(--border)' }}
+          title={rule.enabled ? 'Disable rule' : 'Enable rule'}
+        >
+          <span
+            className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all"
+            style={{ left: rule.enabled ? '22px' : '2px' }}
+          />
+        </button>
       </div>
-      <button
-        onClick={() => onToggle(rule.id)}
-        className="w-10 h-5 rounded-full transition-all relative flex-shrink-0"
-        style={{ backgroundColor: rule.enabled ? (rule.type === 'damage' ? '#ef4444' : '#22c55e') : 'var(--border)' }}
-      >
-        <span
-          className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all"
-          style={{ left: rule.enabled ? '22px' : '2px' }}
-        />
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onPin}
+          className="px-2 py-1 rounded-lg font-pixel text-[6px] transition-all active:scale-95"
+          style={{
+            backgroundColor: rule.pinnedToHome ? 'var(--accent)' : 'var(--shell)',
+            color: rule.pinnedToHome ? 'white' : 'var(--text-muted)',
+            border: `1px solid ${rule.pinnedToHome ? 'var(--accent)' : 'var(--border)'}`,
+          }}
+        >
+          {rule.pinnedToHome ? 'UNPIN HOME' : 'PIN HOME'}
+        </button>
+        {onDelete ? (
+          <button
+            onClick={() => onDelete(rule.id)}
+            className="px-2 py-1 rounded-lg font-pixel text-[6px] transition-all active:scale-95"
+            style={{
+              backgroundColor: 'transparent',
+              color: '#ef4444',
+              border: '1px solid #ef4444',
+            }}
+          >
+            DELETE
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

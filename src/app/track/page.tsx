@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AppShell } from '@/components/layout/AppShell';
 import { useVictoriaStore } from '@/store';
-import { db } from '@/lib/db';
+import { addLogEntry, db } from '@/lib/db';
 import { cn, getTodayDateKey } from '@/lib/utils';
 import type { LogEntry, LogCategory } from '@/types';
 
@@ -43,7 +43,7 @@ export default function TrackPage() {
 
     if (entries.length === 0) return;
 
-    await db.logEntries.bulkAdd(entries);
+    await Promise.all(entries.map((entry) => addLogEntry({ ...entry, source: 'track' })));
     setValues({});
     setSavedFeedback(true);
     setTimeout(() => setSavedFeedback(false), 2000);

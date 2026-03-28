@@ -87,12 +87,34 @@ export async function getOrCreateTodayLog(moodScore: number): Promise<DailyLog> 
 
 export async function addLogEntry(entry: LogEntry): Promise<void> {
   await db.logEntries.add(entry);
-  const log = await getOrCreateTodayLog(70);
+  const log = await getOrCreateTodayLog(entry.scoreDelta !== undefined ? Math.max(0, Math.min(100, 70 + entry.scoreDelta)) : 70);
   const updated = {
     ...log,
     entries: [...log.entries, entry],
+    scoreDelta: log.scoreDelta + (entry.scoreDelta ?? 0),
   };
   await db.dailyLogs.put(updated);
+}
+
+export async function addLogEntryWithMood(entry: LogEntry, moodScore: number): Promise<void> {
+  await db.logEntries.add(entry);
+  const log = await getOrCreateTodayLog(moodScore);
+  const updated = {
+    ...log,
+    entries: [...log.entries, entry],
+    moodScore,
+    scoreDelta: log.scoreDelta + (entry.scoreDelta ?? 0),
+  };
+  await db.dailyLogs.put(updated);
+}
+
+export async function syncTodayMoodScore(moodScore: number): Promise<void> {
+  const log = await getOrCreateTodayLog(moodScore);
+  if (log.moodScore === moodScore) return;
+  await db.dailyLogs.put({
+    ...log,
+    moodScore,
+  });
 }
 
 export async function getLogEntriesForRange(

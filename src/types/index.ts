@@ -1,18 +1,13 @@
-// ─── Tiers ────────────────────────────────────────────────────────────────────
 import { getTodayDateKey } from '@/lib/utils';
 
 export type Tier = 'free' | 'pro' | 'max';
 
-// ─── Themes ───────────────────────────────────────────────────────────────────
 export type Theme = 'classic' | 'midnight' | 'clean';
 
-// ─── Languages ────────────────────────────────────────────────────────────────
 export type Language = 'en' | 'ru' | 'bg' | 'de' | 'fr' | 'es' | 'pt' | 'it' | 'pl';
 
-// ─── Character ────────────────────────────────────────────────────────────────
 export type CharacterMode = 'creature' | 'girl' | 'cat';
 
-// ─── Mood ─────────────────────────────────────────────────────────────────────
 export type MoodTier = 'sunshine' | 'balanced' | 'sideeye' | 'icequeen' | 'dark';
 
 export function getMoodTier(score: number): MoodTier {
@@ -31,10 +26,8 @@ export const MOOD_TIER_NAMES: Record<MoodTier, string> = {
   dark: 'Dark Victoria',
 };
 
-// ─── Personality ──────────────────────────────────────────────────────────────
 export type PersonalityMode = 'cheerful' | 'balanced' | 'critical';
 
-// ─── Scoring Rule ─────────────────────────────────────────────────────────────
 export interface ScoringRule {
   id: string;
   label: string;
@@ -43,60 +36,61 @@ export interface ScoringRule {
   points: number;
   enabled: boolean;
   category: 'fitness' | 'diet' | 'social' | 'career' | 'daily' | 'custom';
+  pinnedToHome?: boolean;
+  triggerPhrases?: string[];
 }
 
 export const DEFAULT_SCORING_RULES: ScoringRule[] = [
-  // Damage rules
-  { id: 'late_wake', label: 'Woke up after 10am', emoji: '😴', type: 'damage', points: 10, enabled: true, category: 'daily' },
-  { id: 'no_workout', label: 'No workout on workout day', emoji: '🏋️', type: 'damage', points: 15, enabled: true, category: 'fitness' },
-  { id: 'drank_beer', label: '2+ beers / drinks', emoji: '🍺', type: 'damage', points: 10, enabled: true, category: 'diet' },
-  { id: 'no_job_app', label: 'No job application in 3 days', emoji: '💼', type: 'damage', points: 20, enabled: true, category: 'career' },
-  { id: 'skipped_checkin', label: 'Skipped morning check-in', emoji: '☀️', type: 'damage', points: 8, enabled: true, category: 'daily' },
-  { id: 'ordered_food', label: 'Ordered food instead of cooking', emoji: '🛵', type: 'damage', points: 5, enabled: true, category: 'diet' },
-  { id: 'no_plan_progress', label: 'No fitness plan progress today', emoji: '📋', type: 'damage', points: 2, enabled: true, category: 'fitness' },
-  // Heal rules
-  { id: 'did_workout', label: 'Did pushups / ABS', emoji: '💪', type: 'heal', points: 10, enabled: true, category: 'fitness' },
-  { id: 'outdoor_workout', label: 'Swam / outdoor workout', emoji: '🏊', type: 'heal', points: 20, enabled: true, category: 'fitness' },
-  { id: 'long_walk', label: 'Walked 2km+', emoji: '🚶', type: 'heal', points: 12, enabled: true, category: 'fitness' },
-  { id: 'no_beer', label: 'No alcohol today', emoji: '🚫🍺', type: 'heal', points: 10, enabled: true, category: 'diet' },
-  { id: 'healthy_meal', label: 'Logged healthy meal', emoji: '🥗', type: 'heal', points: 8, enabled: true, category: 'diet' },
-  { id: 'meditation', label: 'Meditation / Practice', emoji: '🧘', type: 'heal', points: 7, enabled: true, category: 'daily' },
-  { id: 'slept_early', label: 'Slept before midnight', emoji: '😴', type: 'heal', points: 7, enabled: true, category: 'daily' },
-  { id: 'job_application', label: 'Applied to a job', emoji: '📨', type: 'heal', points: 20, enabled: true, category: 'career' },
-  { id: 'met_friend', label: 'Met a friend', emoji: '👥', type: 'heal', points: 15, enabled: true, category: 'social' },
-  { id: 'went_out', label: 'Went somewhere (museum, event, etc.)', emoji: '🏛️', type: 'heal', points: 18, enabled: true, category: 'social' },
-  { id: 'cooked', label: 'Batch cooked meals', emoji: '🍳', type: 'heal', points: 15, enabled: true, category: 'diet' },
-  { id: 'cleaned_house', label: 'Cleaned the house', emoji: '🧹', type: 'heal', points: 12, enabled: true, category: 'daily' },
-  { id: 'did_laundry', label: 'Did laundry', emoji: '👕', type: 'heal', points: 8, enabled: true, category: 'daily' },
+  { id: 'late_wake', label: 'Woke up after 10am', emoji: '😴', type: 'damage', points: 10, enabled: true, category: 'daily', triggerPhrases: ['woke up after 10', 'woke up late', 'slept in'] },
+  { id: 'no_workout', label: 'No workout on workout day', emoji: '🏋️', type: 'damage', points: 15, enabled: true, category: 'fitness', triggerPhrases: ['skipped workout', 'no workout today', 'did not train'] },
+  { id: 'drank_beer', label: '2+ beers / drinks', emoji: '🍺', type: 'damage', points: 10, enabled: true, category: 'diet', triggerPhrases: ['drank beer', 'had beers', 'got drunk', 'too much alcohol', 'drank a lot'] },
+  { id: 'no_job_app', label: 'No job application in 3 days', emoji: '💼', type: 'damage', points: 20, enabled: true, category: 'career', triggerPhrases: ['did not apply to jobs', 'no job application', 'skipped job search'] },
+  { id: 'skipped_checkin', label: 'Skipped morning check-in', emoji: '☀️', type: 'damage', points: 8, enabled: true, category: 'daily', triggerPhrases: ['skipped check in', 'missed morning check in'] },
+  { id: 'ordered_food', label: 'Ordered food instead of cooking', emoji: '🛵', type: 'damage', points: 5, enabled: true, category: 'diet', triggerPhrases: ['ordered food', 'ordered takeaway', 'got takeout'] },
+  { id: 'no_plan_progress', label: 'No fitness plan progress today', emoji: '📋', type: 'damage', points: 2, enabled: true, category: 'fitness', triggerPhrases: ['no plan progress', 'did not follow my plan'] },
+  { id: 'did_workout', label: 'Did pushups / ABS', emoji: '💪', type: 'heal', points: 10, enabled: true, category: 'fitness', pinnedToHome: true, triggerPhrases: ['did pushups', 'worked out', 'did abs', 'trained today'] },
+  { id: 'outdoor_workout', label: 'Swam / outdoor workout', emoji: '🏊', type: 'heal', points: 20, enabled: true, category: 'fitness', triggerPhrases: ['went swimming', 'did outdoor workout', 'swam today'] },
+  { id: 'long_walk', label: 'Walked 2km+', emoji: '🚶', type: 'heal', points: 12, enabled: true, category: 'fitness', pinnedToHome: true, triggerPhrases: ['walked 2km', 'long walk', 'walked a lot'] },
+  { id: 'no_beer', label: 'No alcohol today', emoji: '🚫🍺', type: 'heal', points: 10, enabled: true, category: 'diet', triggerPhrases: ['no alcohol today', 'stayed sober', 'did not drink'] },
+  { id: 'healthy_meal', label: 'Logged healthy meal', emoji: '🥗', type: 'heal', points: 8, enabled: true, category: 'diet', pinnedToHome: true, triggerPhrases: ['healthy meal', 'ate healthy', 'ate clean'] },
+  { id: 'meditation', label: 'Meditation / Practice', emoji: '🧘', type: 'heal', points: 7, enabled: true, category: 'daily', pinnedToHome: true, triggerPhrases: ['meditated', 'did meditation', 'practice session'] },
+  { id: 'slept_early', label: 'Slept before midnight', emoji: '😴', type: 'heal', points: 7, enabled: true, category: 'daily', triggerPhrases: ['slept before midnight', 'went to bed early'] },
+  { id: 'job_application', label: 'Applied to a job', emoji: '📨', type: 'heal', points: 20, enabled: true, category: 'career', pinnedToHome: true, triggerPhrases: ['applied to a job', 'sent job application', 'job application done'] },
+  { id: 'met_friend', label: 'Met a friend', emoji: '👥', type: 'heal', points: 15, enabled: true, category: 'social', triggerPhrases: ['met a friend', 'saw a friend'] },
+  { id: 'went_out', label: 'Went somewhere (museum, event, etc.)', emoji: '🏛️', type: 'heal', points: 18, enabled: true, category: 'social', triggerPhrases: ['went out', 'left the house', 'went somewhere'] },
+  { id: 'cooked', label: 'Batch cooked meals', emoji: '🍳', type: 'heal', points: 15, enabled: true, category: 'diet', triggerPhrases: ['cooked today', 'batch cooked', 'made food'] },
+  { id: 'cleaned_house', label: 'Cleaned the house', emoji: '🧹', type: 'heal', points: 12, enabled: true, category: 'daily', triggerPhrases: ['cleaned the house', 'cleaned today'] },
+  { id: 'did_laundry', label: 'Did laundry', emoji: '👕', type: 'heal', points: 8, enabled: true, category: 'daily', triggerPhrases: ['did laundry', 'washed clothes'] },
 ];
 
-// ─── Daily Log ────────────────────────────────────────────────────────────────
 export interface LogEntry {
   id: string;
-  date: string; // ISO date string YYYY-MM-DD
+  date: string;
   timestamp: number;
   category: string;
   value: string | number | boolean;
   note?: string;
+  source?: 'track' | 'rule' | 'chat-confirmation' | 'mini-game' | 'system';
+  ruleId?: string;
+  scoreDelta?: number;
 }
 
 export interface DailyLog {
   id: string;
   date: string;
   entries: LogEntry[];
-  moodScore: number; // Victoria's score at end of day
-  scoreDelta: number; // +/- for the day
-  wakeTime?: string; // HH:MM
+  moodScore: number;
+  scoreDelta: number;
+  wakeTime?: string;
   checkinDone: boolean;
 }
 
-// ─── Log Category ─────────────────────────────────────────────────────────────
 export interface LogCategory {
   id: string;
   label: string;
   emoji: string;
-  type: 'number' | 'boolean' | 'text' | 'scale'; // scale = 1-10
-  unit?: string; // kg, ml, etc.
+  type: 'number' | 'boolean' | 'text' | 'scale';
+  unit?: string;
   enabled: boolean;
 }
 
@@ -112,7 +106,6 @@ export const DEFAULT_LOG_CATEGORIES: LogCategory[] = [
   { id: 'notes', label: 'Daily notes', emoji: '📝', type: 'text', enabled: true },
 ];
 
-// ─── Chat ─────────────────────────────────────────────────────────────────────
 export type ChatSphere = 'main' | 'health' | 'career' | 'social' | 'mind' | 'daily';
 
 export const SPHERE_META: Record<ChatSphere, { label: string; emoji: string; color: string }> = {
@@ -140,13 +133,12 @@ export interface ChatThread {
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
-  pinnedContext?: string; // saved MD/text context for this sphere
+  pinnedContext?: string;
 }
 
-// ─── Fitness Plan ─────────────────────────────────────────────────────────────
 export interface FitnessDay {
-  day: number; // 1-14
-  date?: string; // ISO date if assigned
+  day: number;
+  date?: string;
   workoutType: 'rest' | 'home' | 'outdoor';
   exercises: string[];
   done: boolean;
@@ -162,7 +154,6 @@ export interface FitnessPlan {
   active: boolean;
 }
 
-// ─── Todo ─────────────────────────────────────────────────────────────────────
 export interface TodoItem {
   id: string;
   text: string;
@@ -172,7 +163,6 @@ export interface TodoItem {
   sphere?: ChatSphere;
 }
 
-// ─── Long-term Goal ───────────────────────────────────────────────────────────
 export interface Goal {
   id: string;
   text: string;
@@ -181,15 +171,14 @@ export interface Goal {
   done: boolean;
   createdAt: number;
   lastCheckin?: string;
-  progress?: string; // free text notes on progress
+  progress?: string;
 }
 
-// ─── Save Slot ────────────────────────────────────────────────────────────────
 export interface SaveSlot {
   slot: 1 | 2 | 3;
   label: string;
   savedAt: number;
-  day: number; // how many days since first use
+  day: number;
   moodScore: number;
   data: AppSnapshot;
 }
@@ -204,10 +193,8 @@ export interface AppSnapshot {
   moodScore: number;
   streakDays: number;
   totalDays: number;
-  // NOTE: API keys are explicitly excluded from snapshots
 }
 
-// ─── App Settings ─────────────────────────────────────────────────────────────
 export interface AppSettings {
   userName: string;
   theme: Theme;
@@ -216,22 +203,23 @@ export interface AppSettings {
   personalityMode: PersonalityMode;
   animationsEnabled: boolean;
   animationLevel: 'full' | 'reduced' | 'off';
-  wakeUpTime: string; // HH:MM
-  sleepTime: string; // HH:MM - when she goes to sleep (00:00)
+  wakeUpTime: string;
+  sleepTime: string;
   tier: Tier;
   onboardingDone: boolean;
   notificationsEnabled: boolean;
   voiceEnabled: boolean;
-  voiceRate: number; // 0.5 - 2
-  voicePitch: number; // 0 - 2
-  selectedVoiceName?: string; // browser voice name
+  voiceRate: number;
+  voicePitch: number;
+  selectedVoiceName?: string;
   createdAt: number;
   firstOpenDate: string;
   messageCount: number;
-  tamaShellColor?: string; // custom shell color (hex)
-  tamaScreenColor?: string; // custom screen color (hex)
+  tamaShellColor?: string;
+  tamaScreenColor?: string;
   soundsEnabled: boolean;
   soundVolume: number;
+  chatScoreConfirmationsEnabled: boolean;
   morningBriefingEnabled: boolean;
   morningLocation: string;
   morningWeatherEnabled: boolean;
@@ -262,6 +250,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   messageCount: 0,
   soundsEnabled: false,
   soundVolume: 1,
+  chatScoreConfirmationsEnabled: true,
   morningBriefingEnabled: true,
   morningLocation: 'Sofia, Bulgaria',
   morningWeatherEnabled: true,
