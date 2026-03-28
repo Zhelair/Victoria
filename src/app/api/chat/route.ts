@@ -37,6 +37,8 @@ export async function POST(req: NextRequest) {
       moodTier = 'balanced',
       sphere = 'main',
       userName = 'friend',
+      companionContext = '',
+      pinnedContext = '',
       apiKey,
     } = body;
 
@@ -54,7 +56,10 @@ export async function POST(req: NextRequest) {
       MOOD_CONTEXT[moodTier] ?? '',
       SPHERE_CONTEXT[sphere] ?? '',
       `The user's name is ${userName}.`,
+      companionContext ? `Trusted companion memory from the app:\n${companionContext}` : '',
+      pinnedContext ? `Pinned context for this chat sphere:\n${pinnedContext}` : '',
       'Keep responses concise, personal, and conversational. Use the user\'s name occasionally. Avoid markdown unless asked.',
+      'Treat the app context as reliable background memory. Use it naturally when helpful, and do not dump the full context unless the user asks for a summary.',
       'You can reference context from previous messages in this conversation.',
     ]
       .filter(Boolean)

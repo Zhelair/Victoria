@@ -15,11 +15,25 @@ export default function OnboardingPage() {
   const hasHydrated = useVictoriaStore((s) => s._hasHydrated);
   const updateSettings = useVictoriaStore((s) => s.updateSettings);
   const settings = useVictoriaStore((s) => s.settings);
+  const [hydrationTimedOut, setHydrationTimedOut] = useState(false);
 
   const [step, setStep] = useState<Step>('welcome');
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
   const [wakeTime, setWakeTime] = useState('09:00');
+
+  useEffect(() => {
+    if (hasHydrated) {
+      setHydrationTimedOut(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setHydrationTimedOut(true);
+    }, 1500);
+
+    return () => window.clearTimeout(timeout);
+  }, [hasHydrated]);
 
   useEffect(() => {
     if (!hasHydrated) return;
@@ -38,7 +52,19 @@ export default function OnboardingPage() {
   };
 
   if (!hasHydrated) {
-    return null;
+    return (
+      <OnboardingStatus
+        message={
+          hydrationTimedOut
+            ? 'Your saved session is taking longer than usual to restore.'
+            : 'Preparing Victoria...'
+        }
+      />
+    );
+  }
+
+  if (settings.onboardingDone) {
+    return <OnboardingStatus message="Opening your companion..." />;
   }
 
   return (
@@ -174,6 +200,25 @@ export default function OnboardingPage() {
         ))}
       </div>
     </div>
+    </div>
+  );
+}
+
+function OnboardingStatus({ message }: { message: string }) {
+  return (
+    <div
+      data-theme="midnight"
+      className="min-h-screen flex items-center justify-center p-6"
+      style={{ backgroundColor: '#0d0d1a' }}
+    >
+      <div className="card p-6 w-full max-w-md text-center">
+        <p className="font-pixel text-[9px]" style={{ color: 'var(--accent)' }}>
+          VICTORIA
+        </p>
+        <p className="text-sm mt-4" style={{ color: 'var(--text)' }}>
+          {message}
+        </p>
+      </div>
     </div>
   );
 }
