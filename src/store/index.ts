@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
+import { getTodayDateKey } from '@/lib/utils';
 import type {
   AppSettings,
   ScoringRule,
@@ -176,7 +177,7 @@ export const useVictoriaStore = create<VictoriaState>()(
 
       miniGameUsage: { date: '', feed: 0, play: 0, cleaned: false, slept: false, giftGiven: false, complimentCount: 0 },
       recordMiniGame: (game) => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getTodayDateKey();
         const prev = get().miniGameUsage;
         const u = prev.date === today ? prev : { date: today, feed: 0, play: 0, cleaned: false, slept: false, giftGiven: false, complimentCount: 0 };
         const newU = { ...u };
@@ -196,7 +197,7 @@ export const useVictoriaStore = create<VictoriaState>()(
       },
 
       recordGirlInteraction: (type) => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getTodayDateKey();
         const prev = get().miniGameUsage;
         const u = prev.date === today
           ? prev

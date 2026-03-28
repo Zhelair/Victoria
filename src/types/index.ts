@@ -1,4 +1,6 @@
 // ─── Tiers ────────────────────────────────────────────────────────────────────
+import { getTodayDateKey } from '@/lib/utils';
+
 export type Tier = 'free' | 'pro' | 'max';
 
 // ─── Themes ───────────────────────────────────────────────────────────────────
@@ -229,6 +231,7 @@ export interface AppSettings {
   tamaShellColor?: string; // custom shell color (hex)
   tamaScreenColor?: string; // custom screen color (hex)
   soundsEnabled: boolean;
+  soundVolume: number;
   morningBriefingEnabled: boolean;
   morningLocation: string;
   morningWeatherEnabled: boolean;
@@ -255,9 +258,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   voicePitch: 1.1,
   selectedVoiceName: undefined,
   createdAt: Date.now(),
-  firstOpenDate: new Date().toISOString().split('T')[0],
+  firstOpenDate: getTodayDateKey(),
   messageCount: 0,
   soundsEnabled: false,
+  soundVolume: 1,
   morningBriefingEnabled: true,
   morningLocation: 'Sofia, Bulgaria',
   morningWeatherEnabled: true,

@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useVictoriaStore } from '@/store';
 import { AppShell } from '@/components/layout/AppShell';
 import { db } from '@/lib/db';
-import { cn } from '@/lib/utils';
+import { cn, getTodayDateKey } from '@/lib/utils';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import type { ScoringRule, Theme, Language, CharacterMode, PersonalityMode, SaveSlot, AppSnapshot } from '@/types';
 
@@ -150,7 +150,7 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `victoria-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = `victoria-backup-${getTodayDateKey()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setExportSuccess(true);
@@ -378,6 +378,24 @@ export default function SettingsPage() {
                 <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                   Plays short retro sounds when interacting with the tamagotchi.
                 </p>
+                <div className="mt-3 flex items-center gap-3">
+                  <span className="font-pixel text-[7px]" style={{ color: 'var(--text-muted)' }}>
+                    Volume
+                  </span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1.5}
+                    step={0.05}
+                    value={settings.soundVolume ?? 1}
+                    onChange={(e) => updateSettings({ soundVolume: Number(e.target.value) })}
+                    className="flex-1"
+                    disabled={!settings.soundsEnabled}
+                  />
+                  <span className="font-pixel text-[7px] w-10 text-right" style={{ color: 'var(--accent)' }}>
+                    {Math.round((settings.soundVolume ?? 1) * 100)}%
+                  </span>
+                </div>
               </SettingsSection>
 
               {/* Wake time */}

@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie';
+import { getDateKeyDaysAgo, getTodayDateKey } from '@/lib/utils';
 import type {
   DailyLog,
   LogEntry,
@@ -63,12 +64,12 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
 }
 
 export async function getTodayLog(): Promise<DailyLog | null> {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayDateKey();
   return (await db.dailyLogs.where('date').equals(today).first()) ?? null;
 }
 
 export async function getOrCreateTodayLog(moodScore: number): Promise<DailyLog> {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayDateKey();
   const existing = await db.dailyLogs.where('date').equals(today).first();
   if (existing) return existing;
 
@@ -126,9 +127,7 @@ export async function deleteChatThread(id: string): Promise<void> {
 export async function getMoodScoreHistory(
   days: number = 30
 ): Promise<Array<{ date: string; score: number }>> {
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - days);
-  const startStr = startDate.toISOString().split('T')[0];
+  const startStr = getDateKeyDaysAgo(days);
   const logs = await db.dailyLogs
     .where('date')
     .aboveOrEqual(startStr)

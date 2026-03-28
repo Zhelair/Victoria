@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AppShell } from '@/components/layout/AppShell';
 import { db } from '@/lib/db';
-import { cn } from '@/lib/utils';
+import { cn, getTodayDateKey } from '@/lib/utils';
 import type { FitnessDay, FitnessPlan, TodoItem, Goal } from '@/types';
 
 export default function PlansPage() {
@@ -79,7 +79,7 @@ function FitnessTab() {
       id: uuidv4(),
       title: newPlanTitle,
       createdAt: Date.now(),
-      startDate: new Date().toISOString().split('T')[0],
+      startDate: getTodayDateKey(),
       days,
       active: true,
     };

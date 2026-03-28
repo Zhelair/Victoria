@@ -7,7 +7,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { AppShell } from '@/components/layout/AppShell';
 import { useVictoriaStore } from '@/store';
 import { db } from '@/lib/db';
-import { cn } from '@/lib/utils';
+import { cn, getTodayDateKey } from '@/lib/utils';
 import type { LogEntry, LogCategory } from '@/types';
 
 export default function TrackPage() {
@@ -17,7 +17,7 @@ export default function TrackPage() {
   const updateLogCategory = useVictoriaStore((s) => s.updateLogCategory);
   const addLogCategory = useVictoriaStore((s) => s.addLogCategory);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayDateKey();
   const todayEntries = useLiveQuery(
     () => db.logEntries.where('date').equals(today).toArray(),
     [today]

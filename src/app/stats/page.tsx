@@ -9,6 +9,7 @@ import {
 import { AppShell } from '@/components/layout/AppShell';
 import { useVictoriaStore } from '@/store';
 import { db, getMoodScoreHistory } from '@/lib/db';
+import { getDateKeyDaysAgo } from '@/lib/utils';
 
 
 type Range = 7 | 30 | 90;
@@ -35,9 +36,7 @@ export default function StatsPage() {
     setMoodHistory(mood);
 
     // Category data from log entries
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    const startStr = startDate.toISOString().split('T')[0];
+    const startStr = getDateKeyDaysAgo(days);
 
     const entries = await db.logEntries
       .where('date')

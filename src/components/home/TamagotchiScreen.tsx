@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useVictoriaStore } from '@/store';
 import { getMoodTier, MOOD_TIER_NAMES } from '@/types';
+import { getTodayDateKey } from '@/lib/utils';
 import { PixelCharacter } from './PixelCharacter';
 import {
   playFeed, playPlay, playClean, playSleep,
@@ -37,6 +38,7 @@ export function TamagotchiScreen() {
   const [catBoxCatches, setCatBoxCatches] = useState(0);
   const [catBoxDismissed, setCatBoxDismissed] = useState(false);
   const [isIdle, setIsIdle] = useState(false);
+  const [showMoodAdjuster, setShowMoodAdjuster] = useState(false);
   const idleTimerRef = useRef<NodeJS.Timeout>();
 
   const moodTier = getMoodTier(moodScore);
@@ -44,8 +46,9 @@ export function TamagotchiScreen() {
   const isCat = settings.characterMode === 'cat';
   const isGirl = settings.characterMode === 'girl';
   const snd = settings.soundsEnabled;
+  const soundVolume = settings.soundVolume ?? 1;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayDateKey();
   const u = miniGameUsage.date === today
     ? miniGameUsage
     : {
@@ -101,7 +104,7 @@ export function TamagotchiScreen() {
       setTapFeedback(pick);
       setTimeout(() => setTapFeedback(null), 1200);
     }
-    if (snd) playInteract();
+    if (snd) playInteract(soundVolume);
   };
 
   const handleGame = (game: 'feed' | 'play' | 'clean' | 'sleep') => {
@@ -118,10 +121,10 @@ export function TamagotchiScreen() {
     };
     showFeedback(messages[game] ?? 'Done!', result.delta > 0 ? '#22c55e' : 'var(--text-muted)');
     if (snd) {
-      if (game === 'feed') playFeed();
-      else if (game === 'play') playPlay();
-      else if (game === 'clean') playClean();
-      else if (game === 'sleep') playSleep();
+      if (game === 'feed') playFeed(soundVolume);
+      else if (game === 'play') playPlay(soundVolume);
+      else if (game === 'clean') playClean(soundVolume);
+      else if (game === 'sleep') playSleep(soundVolume);
     }
   };
 
@@ -131,11 +134,11 @@ export function TamagotchiScreen() {
     if (Math.random() < hissChance) {
       adjustMoodScore(-1);
       showFeedback('😾 HISS! She bit you! -1', '#ef4444');
-      if (snd) playHiss();
+      if (snd) playHiss(soundVolume);
     } else {
       adjustMoodScore(2);
       showFeedback('😻 Purrrr... +2', '#22c55e');
-      if (snd) playPurr();
+      if (snd) playPurr(soundVolume);
     }
   };
 
@@ -159,7 +162,7 @@ export function TamagotchiScreen() {
       }
     } else {
       showFeedback(`🐭 She catches it! +${result.delta}`, '#22c55e');
-      if (snd) playPlay();
+      if (snd) playPlay(soundVolume);
     }
   };
 
@@ -172,7 +175,7 @@ export function TamagotchiScreen() {
     if (moodTier === 'sunshine' || moodTier === 'balanced') {
       adjustMoodScore(3);
       showFeedback('🎁 She loves it! ✨ +3', '#22c55e');
-      if (snd) playGift();
+      if (snd) playGift(soundVolume);
     } else if (moodTier === 'sideeye') {
       adjustMoodScore(1);
       showFeedback('😐 She accepts it. +1', '#f59e0b');
@@ -190,7 +193,7 @@ export function TamagotchiScreen() {
     if (moodTier === 'sunshine' || moodTier === 'balanced') {
       adjustMoodScore(1);
       showFeedback('💬 She blushes! +1', '#ff9999');
-      if (snd) playCompliment();
+      if (snd) playCompliment(soundVolume);
     } else if (moodTier === 'sideeye') {
       showFeedback('📚 Side-eye. She keeps reading.', 'var(--text-muted)');
     } else {
@@ -205,6 +208,22 @@ export function TamagotchiScreen() {
   const screenStyle = settings.tamaScreenColor
     ? { backgroundColor: settings.tamaScreenColor, borderColor: darkenHex(settings.tamaScreenColor, 0.5) }
     : {};
+
+  const applyMoodAdjustment = (delta: number) => {
+    if (delta < 0) {
+      const confirmed = window.confirm(
+        `Lower Victoria's mood by ${Math.abs(delta)} points? This is meant for testing different mood states.`
+      );
+      if (!confirmed) return;
+    }
+
+    adjustMoodScore(delta);
+    showFeedback(
+      delta >= 0 ? `Mood adjusted +${delta}` : `Mood adjusted ${delta}`,
+      delta >= 0 ? '#22c55e' : '#ef4444'
+    );
+    setShowMoodAdjuster(false);
+  };
 
   return (
     <div className="flex flex-col items-center">
@@ -254,7 +273,34 @@ export function TamagotchiScreen() {
         <div className="px-3 py-1 rounded-full border border-theme" style={{ backgroundColor: 'var(--shell)' }}>
           <span className="font-pixel text-[9px]">{t('mood.score')}: {moodScore}</span>
         </div>
+        <button
+          onClick={() => setShowMoodAdjuster((prev) => !prev)}
+          className="px-2 py-1 rounded-full border border-theme font-pixel text-[7px] transition-all active:scale-95"
+          style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+          title="Adjust mood score for testing"
+        >
+          +/-
+        </button>
       </div>
+
+      {showMoodAdjuster && (
+        <div className="mt-2 flex flex-wrap justify-center gap-1.5 max-w-[280px]">
+          {[-10, -5, 5, 10].map((delta) => (
+            <button
+              key={delta}
+              onClick={() => applyMoodAdjustment(delta)}
+              className="px-2.5 py-1 rounded-lg font-pixel text-[7px] transition-all active:scale-95"
+              style={{
+                backgroundColor: 'var(--shell)',
+                color: delta > 0 ? '#22c55e' : '#ef4444',
+                border: `1px solid ${delta > 0 ? '#22c55e55' : '#ef444455'}`,
+              }}
+            >
+              {delta > 0 ? `+${delta}` : `${delta}`}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Game feedback */}
       {gameFeedback && (
