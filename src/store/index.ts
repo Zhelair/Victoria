@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import type {
   AppSettings,
   ScoringRule,
@@ -79,6 +79,39 @@ interface VictoriaState {
   recordMiniGame: (game: 'feed' | 'play' | 'clean' | 'sleep') => { allowed: boolean; delta: number };
   recordGirlInteraction: (type: 'gift' | 'compliment') => { allowed: boolean };
 }
+
+const noopStorage: StateStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {},
+};
+
+const safeStorage: StateStorage = {
+  getItem: (name) => {
+    try {
+      if (typeof window === 'undefined') return null;
+      return window.localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name, value) => {
+    try {
+      if (typeof window === 'undefined') return;
+      window.localStorage.setItem(name, value);
+    } catch {
+      // Ignore storage write failures in restricted browser modes.
+    }
+  },
+  removeItem: (name) => {
+    try {
+      if (typeof window === 'undefined') return;
+      window.localStorage.removeItem(name);
+    } catch {
+      // Ignore storage delete failures in restricted browser modes.
+    }
+  },
+};
 
 export const useVictoriaStore = create<VictoriaState>()(
   persist(
@@ -179,7 +212,8 @@ export const useVictoriaStore = create<VictoriaState>()(
     }),
     {
       name: 'victoria-store',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => (typeof window === 'undefined' ? noopStorage : safeStorage)),
+      skipHydration: true,
       merge: (persistedState, currentState) => {
         const persisted = persistedState as Partial<VictoriaState> | undefined;
         return {
@@ -192,7 +226,7 @@ export const useVictoriaStore = create<VictoriaState>()(
           },
         };
       },
-      onRehydrateStorage: () => () => {
+      onRehydrateStorage: () => (_state, _error) => {
         useVictoriaStore.setState({ _hasHydrated: true });
       },
       partialize: (state) => ({

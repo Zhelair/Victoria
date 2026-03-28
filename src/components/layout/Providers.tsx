@@ -9,6 +9,36 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const language = useVictoriaStore((s) => s.settings.language);
 
   useEffect(() => {
+    const persistApi = useVictoriaStore.persist;
+
+    if (persistApi.hasHydrated()) {
+      useVictoriaStore.setState({ _hasHydrated: true });
+      return;
+    }
+
+    useVictoriaStore.setState({ _hasHydrated: false });
+    const unsubHydrate = persistApi.onHydrate(() => {
+      useVictoriaStore.setState({ _hasHydrated: false });
+    });
+    const unsubFinish = persistApi.onFinishHydration(() => {
+      useVictoriaStore.setState({ _hasHydrated: true });
+    });
+
+    Promise.resolve(persistApi.rehydrate())
+      .catch(() => {
+        // Fall back to defaults when storage is unavailable or malformed.
+      })
+      .finally(() => {
+        useVictoriaStore.setState({ _hasHydrated: true });
+      });
+
+    return () => {
+      unsubHydrate();
+      unsubFinish();
+    };
+  }, []);
+
+  useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
