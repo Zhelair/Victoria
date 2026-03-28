@@ -153,11 +153,21 @@ export default function HomePage() {
       <div className="flex flex-col gap-4 p-4">
         <MorningBriefingCard
           settings={settings}
+          moodTier={moodTier}
           pendingTodos={pendingTodos ?? []}
           activeGoals={activeGoals ?? []}
           activePlan={activePlan ?? null}
           streakDays={streakDays}
-          onContinue={() => {
+          onContinue={(briefing) => {
+            try {
+              if (briefing) {
+                sessionStorage.setItem('victoria-morning-chat-briefing', briefing);
+              } else {
+                sessionStorage.removeItem('victoria-morning-chat-briefing');
+              }
+            } catch {
+              // non-critical
+            }
             setActiveSphere('daily');
             router.push('/chat?starter=morning');
           }}
@@ -334,6 +344,7 @@ function TodayTasksWidget() {
 
 function MorningBriefingCard({
   settings,
+  moodTier,
   pendingTodos,
   activeGoals,
   activePlan,
@@ -341,17 +352,44 @@ function MorningBriefingCard({
   onContinue,
 }: {
   settings: ReturnType<typeof useVictoriaStore.getState>['settings'];
+  moodTier: ReturnType<typeof getMoodTier>;
   pendingTodos: Array<{ id: string; text: string }>;
   activeGoals: Array<{ id: string; text: string }>;
   activePlan: { title: string; startDate: string; days: Array<{ done: boolean }> } | null;
   streakDays: number;
-  onContinue: () => void;
+  onContinue: (briefing: string) => void;
 }) {
   const [dismissed, setDismissed] = useState(false);
+  const [liveBriefing, setLiveBriefing] = useState<{
+    briefing: string;
+    weather: {
+      location: string;
+      temperatureC: number;
+      minTemperatureC?: number;
+      maxTemperatureC?: number;
+      description: string;
+      precipitationChance?: number;
+    } | null;
+    event: {
+      year: number;
+      text: string;
+      title?: string;
+      url?: string;
+    } | null;
+  } | null>(null);
+  const [isLiveLoading, setIsLiveLoading] = useState(false);
   const userName = settings.userName || 'friend';
-  const todayKey = useMemo(
-    () => `victoria-morning-briefing-dismissed-${new Date().toISOString().split('T')[0]}`,
+  const todayStamp = useMemo(
+    () => new Date().toISOString().split('T')[0],
     []
+  );
+  const todayKey = useMemo(
+    () => `victoria-morning-briefing-dismissed-${todayStamp}`,
+    [todayStamp]
+  );
+  const liveCacheKey = useMemo(
+    () => `victoria-morning-live-${todayStamp}`,
+    [todayStamp]
   );
 
   useEffect(() => {
@@ -369,12 +407,24 @@ function MorningBriefingCard({
     (Number.isFinite(wakeHour) ? wakeHour : 9) * 60 + (Number.isFinite(wakeMinute) ? wakeMinute : 0);
   const isMorningWindow = currentMinutes >= wakeMinutes && currentMinutes <= wakeMinutes + 6 * 60;
 
-  if (!settings.morningBriefingEnabled || !isMorningWindow || dismissed) {
-    return null;
-  }
-
-  const topTodos = Array.isArray(pendingTodos) ? pendingTodos.slice(0, 3) : [];
-  const topGoals = Array.isArray(activeGoals) ? activeGoals.slice(0, 2) : [];
+  const topTodos = useMemo(
+    () => (Array.isArray(pendingTodos) ? pendingTodos.slice(0, 3) : []),
+    [pendingTodos]
+  );
+  const topGoals = useMemo(
+    () => (Array.isArray(activeGoals) ? activeGoals.slice(0, 2) : []),
+    [activeGoals]
+  );
+  const topTodoTexts = useMemo(
+    () => topTodos.map((todo) => todo.text),
+    [topTodos]
+  );
+  const topGoalTexts = useMemo(
+    () => topGoals.map((goal) => goal.text),
+    [topGoals]
+  );
+  const topTodoSignature = topTodoTexts.join('||');
+  const topGoalSignature = topGoalTexts.join('||');
   const factCategories =
     typeof settings.morningFactCategories === 'string'
       ? settings.morningFactCategories
@@ -399,6 +449,124 @@ function MorningBriefingCard({
         planDays.filter((day) => day.done).length
       )
     : null;
+  const fallbackBriefing = [
+    `Good morning, ${userName}.`,
+    topTodos.length > 0
+      ? `Your top tasks are ${topTodos.slice(0, 2).map((todo) => todo.text).join(' and ')}.`
+      : 'You do not have any saved tasks yet, so pick one clean first win.',
+    topGoals.length > 0
+      ? `Keep ${topGoals[0].text} in focus today.`
+      : 'Today is a good day to define one clear goal.',
+    activePlanDay ? `Your active plan is ${planTitle}, day ${activePlanDay}.` : '',
+    streakDays > 0
+      ? `Your streak is ${streakDays} day${streakDays === 1 ? '' : 's'}, so protect the momentum.`
+      : 'Today can be your reset point.',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  useEffect(() => {
+    if (!settings.morningBriefingEnabled || !isMorningWindow || dismissed) return;
+
+    try {
+      const cached = sessionStorage.getItem(liveCacheKey);
+      if (cached) {
+        setLiveBriefing(JSON.parse(cached));
+        return;
+      }
+    } catch {
+      // Ignore cache issues and continue with a live request.
+    }
+
+    let cancelled = false;
+    setIsLiveLoading(true);
+
+    fetch('/api/morning', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userName,
+        personality: settings.personalityMode,
+        moodTier,
+        location,
+        weatherEnabled: settings.morningWeatherEnabled,
+        newsEnabled: settings.morningNewsEnabled,
+        newsTopics,
+        factCategories,
+        topTodos: topTodoTexts,
+        topGoals: topGoalTexts,
+        planTitle,
+        planDay: activePlanDay,
+        streakDays,
+      }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error('Morning request failed');
+        }
+
+        return response.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setLiveBriefing(data);
+        try {
+          sessionStorage.setItem(liveCacheKey, JSON.stringify(data));
+        } catch {
+          // non-critical
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLiveBriefing(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLiveLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activePlanDay,
+    dismissed,
+    factCategories,
+    isMorningWindow,
+    liveCacheKey,
+    location,
+    moodTier,
+    newsTopics,
+    planTitle,
+    settings.morningBriefingEnabled,
+    settings.morningNewsEnabled,
+    settings.morningWeatherEnabled,
+    settings.personalityMode,
+    streakDays,
+    topGoalSignature,
+    topGoalTexts,
+    topTodoSignature,
+    topTodoTexts,
+    userName,
+  ]);
+
+  const weatherSummary = liveBriefing?.weather
+    ? `${liveBriefing.weather.location}: ${liveBriefing.weather.temperatureC}C, ${liveBriefing.weather.description}${
+        liveBriefing.weather.maxTemperatureC !== undefined && liveBriefing.weather.minTemperatureC !== undefined
+          ? `, high ${liveBriefing.weather.maxTemperatureC}C / low ${liveBriefing.weather.minTemperatureC}C`
+          : ''
+      }${
+        liveBriefing.weather.precipitationChance !== undefined
+          ? `, rain ${liveBriefing.weather.precipitationChance}%`
+          : ''
+      }`
+    : null;
+
+  if (!settings.morningBriefingEnabled || !isMorningWindow || dismissed) {
+    return null;
+  }
 
   return (
     <div className="card p-4 space-y-3" style={{ borderColor: 'var(--accent)' }}>
@@ -452,18 +620,43 @@ function MorningBriefingCard({
         style={{ backgroundColor: 'var(--shell)', border: '1px solid var(--border)' }}
       >
         <p className="font-pixel text-[7px]" style={{ color: 'var(--accent)' }}>
-          {spark.label}
+          Live Morning Pulse
         </p>
-        <p className="text-xs mt-2" style={{ color: 'var(--text)' }}>
-          {spark.text}
-        </p>
+        {isLiveLoading ? (
+          <p className="text-xs mt-2" style={{ color: 'var(--text)' }}>
+            Victoria is checking the weather and today&apos;s context...
+          </p>
+        ) : liveBriefing?.briefing ? (
+          <p className="text-xs mt-2 leading-relaxed" style={{ color: 'var(--text)' }}>
+            {liveBriefing.briefing}
+          </p>
+        ) : (
+          <>
+            <p className="font-pixel text-[7px] mt-2" style={{ color: 'var(--accent)' }}>
+              {spark.label}
+            </p>
+            <p className="text-xs mt-2" style={{ color: 'var(--text)' }}>
+              {spark.text}
+            </p>
+          </>
+        )}
+        {weatherSummary && (
+          <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
+            Weather: {weatherSummary}
+          </p>
+        )}
+        {liveBriefing?.event && (
+          <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
+            On this day: {liveBriefing.event.year} - {liveBriefing.event.text}
+          </p>
+        )}
         <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
           Focus profile: {location} · topics {newsTopics} · facts {factCategories || 'general'}
         </p>
       </div>
 
       <button
-        onClick={onContinue}
+        onClick={() => onContinue(liveBriefing?.briefing || fallbackBriefing)}
         className="w-full py-3 rounded-xl font-pixel text-[8px] text-white transition-all active:scale-95"
         style={{ backgroundColor: 'var(--accent)' }}
       >
