@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useVictoriaStore } from '@/store';
 import { TamagotchiScreen } from '@/components/home/TamagotchiScreen';
 import { AppShell } from '@/components/layout/AppShell';
-import { pickRandom } from '@/lib/utils';
+import { getTodayDateKey, pickRandom } from '@/lib/utils';
 import { getActivePlanDayNumber, getMorningSpark } from '@/lib/morning';
 import { DEFAULT_SETTINGS, getMoodTier } from '@/types';
 import { db } from '@/lib/db';
@@ -44,6 +44,7 @@ export default function HomePage() {
   const [hydrationTimedOut, setHydrationTimedOut] = useState(false);
 
   const [tamaMode, setTamaMode] = useState(false);
+  const [manualMorningOpen, setManualMorningOpen] = useState(false);
   const pendingTodos = useLiveQuery(
     () => db.todos.orderBy('createdAt').filter((todo) => !todo.done).toArray(),
     []
@@ -73,7 +74,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!settings.notificationsEnabled || !settings.wakeUpTime) return;
 
-    const alreadyFiredKey = `alarm-fired-${new Date().toISOString().split('T')[0]}`;
+    const alreadyFiredKey = `alarm-fired-${getTodayDateKey()}`;
     const tick = setInterval(() => {
       const now = new Date();
       const [h, m] = settings.wakeUpTime.split(':').map(Number);
@@ -109,7 +110,7 @@ export default function HomePage() {
   const handleAction = async (key: string, delta: number, label: string) => {
     adjustMoodScore(delta);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getTodayDateKey();
       await db.logEntries.add({
         id: uuidv4(),
         date: today,
@@ -151,6 +152,22 @@ export default function HomePage() {
   return (
     <AppShell>
       <div className="flex flex-col gap-4 p-4">
+        {settings.morningBriefingEnabled && (
+          <div className="flex justify-end">
+            <button
+              onClick={() => setManualMorningOpen((prev) => !prev)}
+              className="px-3 py-1.5 rounded-full font-pixel text-[7px] transition-all active:scale-95"
+              style={{
+                backgroundColor: 'var(--shell)',
+                color: 'var(--text-muted)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {manualMorningOpen ? 'Hide briefing' : 'Show morning briefing'}
+            </button>
+          </div>
+        )}
+
         <MorningBriefingCard
           settings={settings}
           moodTier={moodTier}
@@ -158,6 +175,8 @@ export default function HomePage() {
           activeGoals={activeGoals ?? []}
           activePlan={activePlan ?? null}
           streakDays={streakDays}
+          forceOpen={manualMorningOpen}
+          onForceClose={() => setManualMorningOpen(false)}
           onContinue={(briefing) => {
             try {
               if (briefing) {
@@ -168,6 +187,7 @@ export default function HomePage() {
             } catch {
               // non-critical
             }
+            setManualMorningOpen(false);
             setActiveSphere('daily');
             router.push('/chat?starter=morning');
           }}
@@ -349,6 +369,8 @@ function MorningBriefingCard({
   activeGoals,
   activePlan,
   streakDays,
+  forceOpen,
+  onForceClose,
   onContinue,
 }: {
   settings: ReturnType<typeof useVictoriaStore.getState>['settings'];
@@ -357,6 +379,8 @@ function MorningBriefingCard({
   activeGoals: Array<{ id: string; text: string }>;
   activePlan: { title: string; startDate: string; days: Array<{ done: boolean }> } | null;
   streakDays: number;
+  forceOpen?: boolean;
+  onForceClose?: () => void;
   onContinue: (briefing: string) => void;
 }) {
   const [dismissed, setDismissed] = useState(false);
@@ -380,7 +404,7 @@ function MorningBriefingCard({
   const [isLiveLoading, setIsLiveLoading] = useState(false);
   const userName = settings.userName || 'friend';
   const todayStamp = useMemo(
-    () => new Date().toISOString().split('T')[0],
+    () => getTodayDateKey(),
     []
   );
   const todayKey = useMemo(
@@ -393,7 +417,11 @@ function MorningBriefingCard({
   );
 
   useEffect(() => {
-    setDismissed(sessionStorage.getItem(todayKey) === '1');
+    try {
+      setDismissed(sessionStorage.getItem(todayKey) === '1');
+    } catch {
+      setDismissed(false);
+    }
   }, [todayKey]);
 
   const wakeTime =
@@ -406,6 +434,7 @@ function MorningBriefingCard({
   const wakeMinutes =
     (Number.isFinite(wakeHour) ? wakeHour : 9) * 60 + (Number.isFinite(wakeMinute) ? wakeMinute : 0);
   const isMorningWindow = currentMinutes >= wakeMinutes && currentMinutes <= wakeMinutes + 6 * 60;
+  const isVisible = settings.morningBriefingEnabled && (forceOpen || isMorningWindow) && (!dismissed || forceOpen);
 
   const topTodos = useMemo(
     () => (Array.isArray(pendingTodos) ? pendingTodos.slice(0, 3) : []),
@@ -466,7 +495,7 @@ function MorningBriefingCard({
     .join(' ');
 
   useEffect(() => {
-    if (!settings.morningBriefingEnabled || !isMorningWindow || dismissed) return;
+    if (!isVisible) return;
 
     try {
       const cached = sessionStorage.getItem(liveCacheKey);
@@ -534,7 +563,7 @@ function MorningBriefingCard({
     activePlanDay,
     dismissed,
     factCategories,
-    isMorningWindow,
+    isVisible,
     liveCacheKey,
     location,
     moodTier,
@@ -564,7 +593,7 @@ function MorningBriefingCard({
       }`
     : null;
 
-  if (!settings.morningBriefingEnabled || !isMorningWindow || dismissed) {
+  if (!isVisible) {
     return null;
   }
 
@@ -581,14 +610,22 @@ function MorningBriefingCard({
         </div>
         <button
           onClick={() => {
-            sessionStorage.setItem(todayKey, '1');
+            if (forceOpen) {
+              onForceClose?.();
+              return;
+            }
+            try {
+              sessionStorage.setItem(todayKey, '1');
+            } catch {
+              // non-critical
+            }
             setDismissed(true);
           }}
           className="font-pixel text-[8px] px-2 py-1 rounded-lg"
           style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
-          aria-label="Dismiss morning briefing"
+          aria-label={forceOpen ? 'Close morning briefing' : 'Dismiss morning briefing'}
         >
-          x
+          {forceOpen ? 'close' : 'x'}
         </button>
       </div>
 

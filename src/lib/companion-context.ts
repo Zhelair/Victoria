@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { getDateKeyDaysAgo, getTodayDateKey } from '@/lib/utils';
 import type { AppSettings, ChatSphere, Goal, LogEntry, TodoItem } from '@/types';
 
 function formatGoal(goal: Goal) {
@@ -46,10 +47,8 @@ export async function buildCompanionContext({
   streakDays: number;
   totalDays: number;
 }) {
-  const today = new Date().toISOString().split('T')[0];
-  const fourteenDaysAgo = new Date();
-  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-  const startDate = fourteenDaysAgo.toISOString().split('T')[0];
+  const today = getTodayDateKey();
+  const startDate = getDateKeyDaysAgo(14);
 
   const [pendingTodos, activeGoals, activePlan, recentLogs] = await Promise.all([
     db.todos.orderBy('createdAt').filter((todo) => !todo.done).toArray(),

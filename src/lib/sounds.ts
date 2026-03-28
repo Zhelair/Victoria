@@ -3,6 +3,10 @@
 
 let _ctx: AudioContext | null = null;
 
+function clampVolume(volume: number) {
+  return Math.max(0, Math.min(1.5, volume));
+}
+
 function getCtx(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -41,53 +45,57 @@ function beep(
   }
 }
 
+function scaleVolume(baseVolume: number, multiplier = 1) {
+  return clampVolume(baseVolume * multiplier);
+}
+
 // ─── Mini-game sounds ─────────────────────────────────────────────────────────
 
-export function playFeed() {
+export function playFeed(multiplier = 1) {
   // Ascending happy nom-nom tones
-  beep(262, 0.08, 'square', 0.15, 0);
-  beep(330, 0.08, 'square', 0.15, 0.09);
-  beep(392, 0.14, 'square', 0.15, 0.18);
+  beep(262, 0.08, 'square', scaleVolume(0.15, multiplier), 0);
+  beep(330, 0.08, 'square', scaleVolume(0.15, multiplier), 0.09);
+  beep(392, 0.14, 'square', scaleVolume(0.15, multiplier), 0.18);
 }
 
-export function playPlay() {
+export function playPlay(multiplier = 1) {
   // Bouncy playful sequence
-  beep(523, 0.06, 'square', 0.15, 0);
-  beep(784, 0.06, 'square', 0.15, 0.08);
-  beep(523, 0.06, 'square', 0.15, 0.16);
-  beep(659, 0.12, 'square', 0.15, 0.24);
+  beep(523, 0.06, 'square', scaleVolume(0.15, multiplier), 0);
+  beep(784, 0.06, 'square', scaleVolume(0.15, multiplier), 0.08);
+  beep(523, 0.06, 'square', scaleVolume(0.15, multiplier), 0.16);
+  beep(659, 0.12, 'square', scaleVolume(0.15, multiplier), 0.24);
 }
 
-export function playClean() {
+export function playClean(multiplier = 1) {
   // Light water-chime
-  beep(880, 0.1, 'triangle', 0.14, 0);
-  beep(1047, 0.16, 'triangle', 0.14, 0.12);
+  beep(880, 0.1, 'triangle', scaleVolume(0.14, multiplier), 0);
+  beep(1047, 0.16, 'triangle', scaleVolume(0.14, multiplier), 0.12);
 }
 
-export function playSleep() {
+export function playSleep(multiplier = 1) {
   // Descending lullaby
-  beep(392, 0.18, 'triangle', 0.12, 0);
-  beep(330, 0.18, 'triangle', 0.10, 0.20);
-  beep(262, 0.30, 'triangle', 0.08, 0.40);
+  beep(392, 0.18, 'triangle', scaleVolume(0.12, multiplier), 0);
+  beep(330, 0.18, 'triangle', scaleVolume(0.10, multiplier), 0.20);
+  beep(262, 0.30, 'triangle', scaleVolume(0.08, multiplier), 0.40);
 }
 
-export function playSuccess() {
+export function playSuccess(multiplier = 1) {
   // Classic 8-bit fanfare
-  beep(523, 0.08, 'square', 0.15, 0);
-  beep(659, 0.08, 'square', 0.15, 0.09);
-  beep(784, 0.08, 'square', 0.15, 0.18);
-  beep(1047, 0.22, 'square', 0.15, 0.27);
+  beep(523, 0.08, 'square', scaleVolume(0.15, multiplier), 0);
+  beep(659, 0.08, 'square', scaleVolume(0.15, multiplier), 0.09);
+  beep(784, 0.08, 'square', scaleVolume(0.15, multiplier), 0.18);
+  beep(1047, 0.22, 'square', scaleVolume(0.15, multiplier), 0.27);
 }
 
-export function playError() {
+export function playError(multiplier = 1) {
   // Low buzzer
-  beep(196, 0.08, 'square', 0.2, 0);
-  beep(175, 0.18, 'square', 0.2, 0.09);
+  beep(196, 0.08, 'square', scaleVolume(0.2, multiplier), 0);
+  beep(175, 0.18, 'square', scaleVolume(0.2, multiplier), 0.09);
 }
 
 // ─── Cat-specific ─────────────────────────────────────────────────────────────
 
-export function playHiss() {
+export function playHiss(multiplier = 1) {
   // Noise burst
   const c = getCtx();
   if (!c) return;
@@ -101,43 +109,43 @@ export function playHiss() {
     const gain = c.createGain();
     src.connect(gain);
     gain.connect(c.destination);
-    gain.gain.setValueAtTime(0.3, c.currentTime);
+    gain.gain.setValueAtTime(scaleVolume(0.3, multiplier), c.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.22);
     src.start();
     src.stop(c.currentTime + 0.25);
   } catch { /* noop */ }
 }
 
-export function playPurr() {
+export function playPurr(multiplier = 1) {
   // Low rumble
-  beep(55, 0.12, 'sawtooth', 0.12, 0);
-  beep(58, 0.12, 'sawtooth', 0.10, 0.12);
-  beep(55, 0.12, 'sawtooth', 0.08, 0.24);
+  beep(55, 0.12, 'sawtooth', scaleVolume(0.12, multiplier), 0);
+  beep(58, 0.12, 'sawtooth', scaleVolume(0.10, multiplier), 0.12);
+  beep(55, 0.12, 'sawtooth', scaleVolume(0.08, multiplier), 0.24);
 }
 
 // ─── Girl-specific ────────────────────────────────────────────────────────────
 
-export function playGift() {
+export function playGift(multiplier = 1) {
   // Sparkle arpeggio
-  beep(1047, 0.08, 'triangle', 0.13, 0);
-  beep(1319, 0.08, 'triangle', 0.13, 0.10);
-  beep(1568, 0.18, 'triangle', 0.13, 0.20);
+  beep(1047, 0.08, 'triangle', scaleVolume(0.13, multiplier), 0);
+  beep(1319, 0.08, 'triangle', scaleVolume(0.13, multiplier), 0.10);
+  beep(1568, 0.18, 'triangle', scaleVolume(0.13, multiplier), 0.20);
 }
 
-export function playCompliment() {
+export function playCompliment(multiplier = 1) {
   // Soft blush
-  beep(659, 0.10, 'sine', 0.12, 0);
-  beep(784, 0.16, 'sine', 0.10, 0.13);
+  beep(659, 0.10, 'sine', scaleVolume(0.12, multiplier), 0);
+  beep(784, 0.16, 'sine', scaleVolume(0.10, multiplier), 0.13);
 }
 
 // ─── Interaction ──────────────────────────────────────────────────────────────
 
-export function playInteract() {
-  beep(660, 0.07, 'square', 0.10);
+export function playInteract(multiplier = 1) {
+  beep(660, 0.07, 'square', scaleVolume(0.10, multiplier));
 }
 
-export function playBubblePop() {
-  beep(880, 0.04, 'sine', 0.13, 0);
-  beep(1100, 0.04, 'sine', 0.11, 0.05);
-  beep(1500, 0.09, 'sine', 0.07, 0.10);
+export function playBubblePop(multiplier = 1) {
+  beep(880, 0.04, 'sine', scaleVolume(0.13, multiplier), 0);
+  beep(1100, 0.04, 'sine', scaleVolume(0.11, multiplier), 0.05);
+  beep(1500, 0.09, 'sine', scaleVolume(0.07, multiplier), 0.10);
 }
