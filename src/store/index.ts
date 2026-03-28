@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
+import { saveSettings } from '@/lib/db';
 import { getTodayDateKey } from '@/lib/utils';
 import type {
   AppSettings,
@@ -136,7 +137,13 @@ export const useVictoriaStore = create<VictoriaState>()(
 
       settings: DEFAULT_SETTINGS,
       updateSettings: (partial) =>
-        set((s) => ({ settings: { ...s.settings, ...partial } })),
+        set((s) => {
+          const nextSettings = { ...s.settings, ...partial };
+          void saveSettings(nextSettings).catch(() => {
+            // Keep local app usage working even when IndexedDB is unavailable.
+          });
+          return { settings: nextSettings };
+        }),
 
       moodScore: 70,
       setMoodScore: (score) => set({ moodScore: Math.max(0, Math.min(100, score)) }),

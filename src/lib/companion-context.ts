@@ -73,7 +73,7 @@ export async function buildCompanionContext({
   const lines = [
     'Trusted app context from Victoria local data. Use it when relevant, but do not recite it all unless the user asks.',
     `User profile: name ${settings.userName || 'friend'}, active chat sphere ${activeSphere}, mood score ${moodScore}, streak ${streakDays}, total days ${totalDays}.`,
-    `Routine: wake-up time ${settings.wakeUpTime}, sleep time ${settings.sleepTime}.`,
+    `Preferred routine only, not the current clock time: usual wake-up time ${settings.wakeUpTime}, usual sleep time ${settings.sleepTime}.`,
   ];
 
   if (prioritizedGoals.length > 0) {
