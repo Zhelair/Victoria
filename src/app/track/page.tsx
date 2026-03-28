@@ -13,7 +13,9 @@ import type { LogEntry, LogCategory } from '@/types';
 export default function TrackPage() {
   const { t } = useTranslation();
   const [savedFeedback, setSavedFeedback] = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
   const logCategories = useVictoriaStore((s) => s.logCategories);
+  const scoringRules = useVictoriaStore((s) => s.scoringRules);
   const updateLogCategory = useVictoriaStore((s) => s.updateLogCategory);
   const addLogCategory = useVictoriaStore((s) => s.addLogCategory);
 
@@ -29,6 +31,8 @@ export default function TrackPage() {
   const [newCatType, setNewCatType] = useState<LogCategory['type']>('number');
 
   const enabledCategories = logCategories.filter((c) => c.enabled);
+  const sortedEntries = [...(todayEntries ?? [])].sort((a, b) => b.timestamp - a.timestamp);
+  const previewEntries = sortedEntries.slice(0, 5);
 
   const handleSave = async () => {
     const entries: LogEntry[] = Object.entries(values)
@@ -188,31 +192,112 @@ export default function TrackPage() {
         {/* Today's logged entries */}
         {todayEntries && todayEntries.length > 0 && (
           <div className="card p-4">
-            <h3 className="font-pixel text-[8px] mb-3" style={{ color: 'var(--text-muted)' }}>
-              {t('track.history')}
-            </h3>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h3 className="font-pixel text-[8px]" style={{ color: 'var(--text-muted)' }}>
+                {t('track.history')}
+              </h3>
+              {sortedEntries.length > 5 && (
+                <button
+                  onClick={() => setShowAllHistory(true)}
+                  className="px-2 py-1 rounded-lg font-pixel text-[6px]"
+                  style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+                >
+                  View all
+                </button>
+              )}
+            </div>
             <div className="space-y-2">
-              {todayEntries.map((entry) => {
-                const cat = logCategories.find((c) => c.id === entry.category);
-                return (
-                  <div
+              {previewEntries.map((entry) => (
+                <HistoryRow
+                  key={entry.id}
+                  entry={entry}
+                  logCategories={logCategories}
+                  scoringRules={scoringRules}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {showAllHistory && (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.45)' }}
+          >
+            <div className="w-full max-w-lg card p-4 space-y-3 max-h-[80vh] overflow-y-auto">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-pixel text-[8px]" style={{ color: 'var(--accent)' }}>
+                  Full history for today
+                </h3>
+                <button
+                  onClick={() => setShowAllHistory(false)}
+                  className="px-2 py-1 rounded-lg font-pixel text-[6px]"
+                  style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+                >
+                  Close
+                </button>
+              </div>
+              <div className="space-y-2">
+                {sortedEntries.map((entry) => (
+                  <HistoryRow
                     key={entry.id}
-                    className="flex items-center justify-between py-1 border-b border-theme"
-                  >
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                      {cat?.emoji} {cat?.label ?? entry.category}
-                    </span>
-                    <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>
-                      {String(entry.value)}{cat?.unit ? ` ${cat.unit}` : ''}
-                    </span>
-                  </div>
-                );
-              })}
+                    entry={entry}
+                    logCategories={logCategories}
+                    scoringRules={scoringRules}
+                    showMeta
+                  />
+                ))}
+              </div>
             </div>
           </div>
         )}
       </div>
     </AppShell>
+  );
+}
+
+function HistoryRow({
+  entry,
+  logCategories,
+  scoringRules,
+  showMeta = false,
+}: {
+  entry: LogEntry;
+  logCategories: LogCategory[];
+  scoringRules: ReturnType<typeof useVictoriaStore.getState>['scoringRules'];
+  showMeta?: boolean;
+}) {
+  const category = logCategories.find((item) => item.id === entry.category);
+  const rule = scoringRules.find((item) => item.id === (entry.ruleId || entry.category));
+  const label = category?.label ?? rule?.label ?? entry.category;
+  const emoji = category?.emoji ?? rule?.emoji ?? '•';
+  const valueText =
+    entry.scoreDelta !== undefined
+      ? `${entry.scoreDelta > 0 ? '+' : ''}${entry.scoreDelta}`
+      : `${String(entry.value)}${category?.unit ? ` ${category.unit}` : ''}`;
+
+  return (
+    <div className="rounded-xl px-3 py-2" style={{ backgroundColor: 'var(--shell)' }}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs truncate" style={{ color: 'var(--text)' }}>
+            {emoji} {label}
+          </p>
+          {showMeta && (
+            <p className="font-pixel text-[6px] mt-1" style={{ color: 'var(--text-muted)' }}>
+              {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {entry.source ? ` · ${entry.source}` : ''}
+            </p>
+          )}
+        </div>
+        <span
+          className="text-sm font-medium"
+          style={{ color: entry.scoreDelta !== undefined ? (entry.scoreDelta > 0 ? '#22c55e' : '#ef4444') : 'var(--text)' }}
+        >
+          {valueText}
+        </span>
+      </div>
+    </div>
   );
 }
 

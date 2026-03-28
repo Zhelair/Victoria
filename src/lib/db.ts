@@ -68,6 +68,10 @@ export async function getTodayLog(): Promise<DailyLog | null> {
   return (await db.dailyLogs.where('date').equals(today).first()) ?? null;
 }
 
+export async function getDailyLogByDate(date: string): Promise<DailyLog | null> {
+  return (await db.dailyLogs.where('date').equals(date).first()) ?? null;
+}
+
 export async function getOrCreateTodayLog(moodScore: number): Promise<DailyLog> {
   const today = getTodayDateKey();
   const existing = await db.dailyLogs.where('date').equals(today).first();
@@ -125,6 +129,32 @@ export async function getLogEntriesForRange(
     .where('date')
     .between(startDate, endDate, true, true)
     .toArray();
+}
+
+export async function getLogEntriesForDate(date: string): Promise<LogEntry[]> {
+  return db.logEntries.where('date').equals(date).toArray();
+}
+
+export async function markDailyCheckin(date: string = getTodayDateKey(), done: boolean = true): Promise<void> {
+  const log = await getDailyLogByDate(date);
+  if (log) {
+    if (log.checkinDone === done) return;
+    await db.dailyLogs.put({
+      ...log,
+      checkinDone: done,
+    });
+    return;
+  }
+
+  const newLog: DailyLog = {
+    id: `log_${date}`,
+    date,
+    entries: [],
+    moodScore: 70,
+    scoreDelta: 0,
+    checkinDone: done,
+  };
+  await db.dailyLogs.add(newLog);
 }
 
 export async function getChatThreads(sphere?: string): Promise<ChatThread[]> {

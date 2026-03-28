@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { getSettings } from '@/lib/db';
+import { evaluatePendingDailyRules } from '@/lib/scoring';
 import { useVictoriaStore } from '@/store';
 import i18n from '@/i18n';
 
@@ -25,6 +26,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
         })
         .catch(() => {
           // Ignore IndexedDB read failures and fall back to the hydrated store state.
+        })
+        .then(async () => {
+          try {
+            await evaluatePendingDailyRules();
+          } catch {
+            // Ignore scoring engine failures and keep app boot resilient.
+          }
         })
         .finally(() => {
           useVictoriaStore.setState({ _hasHydrated: true });
@@ -57,6 +65,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
           }));
         } catch {
           // Ignore IndexedDB read failures and keep the in-memory state.
+        }
+        try {
+          await evaluatePendingDailyRules();
+        } catch {
+          // Ignore scoring engine failures and keep app boot resilient.
         }
       })
       .finally(() => {
