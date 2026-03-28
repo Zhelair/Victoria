@@ -15,11 +15,18 @@ Set these in Vercel Project Settings -> Environment Variables:
 
 Only `NEXT_PUBLIC_VAPID_PUBLIC_KEY` is intentionally exposed to the browser. The rest stay server-side.
 
+`VAPID_SUBJECT` can be either:
+
+- a website URL, for example `https://victoria-eight.vercel.app`
+- or an email, for example `mailto:you@example.com`
+
+For Victoria right now, using your deployed app URL is totally fine.
+
 ## 2. Run the schema SQL in Supabase
 
 Open Supabase SQL Editor and run:
 
-- [`docs/supabase-reminders.sql`](/C:/Users/niksa/OneDrive/Documents/GitHub/NEW%20PROJECTS/Victoria/docs/supabase-reminders.sql)
+- [`01-reminders-schema.sql`](./01-reminders-schema.sql)
 
 That creates:
 
@@ -27,54 +34,26 @@ That creates:
 - `reminders`
 - `reminder_push_subscriptions`
 
-## 3. Store cron secrets in Supabase Vault
+## 3. Run the cron SQL in Supabase
 
-Run this in Supabase SQL Editor, replacing the example values:
+Open [`02-reminders-cron.sql`](./02-reminders-cron.sql), replace:
 
-```sql
-select vault.create_secret('https://your-vercel-domain.vercel.app', 'victoria_app_url');
-select vault.create_secret('YOUR_CRON_SECRET_FROM_VERCEL', 'victoria_cron_secret');
-```
+- `https://your-vercel-domain.vercel.app`
+- `YOUR_CRON_SECRET_FROM_VERCEL`
 
-If you later move to a custom domain, update the stored app URL.
+Then run the whole file in Supabase SQL Editor.
 
-## 4. Enable the needed extensions
+That file does all of this for you:
 
-Supabase Cron uses `pg_cron`. HTTP calls use `pg_net`.
+- enables `pg_cron`
+- enables `pg_net`
+- stores the app URL in Supabase Vault
+- stores your `CRON_SECRET` in Supabase Vault
+- creates the every-minute reminder cron job
 
-Run:
+If you later move to a custom domain, update the stored app URL and recreate the cron job.
 
-```sql
-create extension if not exists pg_cron;
-create extension if not exists pg_net;
-```
-
-## 5. Create the every-minute cron job
-
-Run:
-
-```sql
-select
-  cron.schedule(
-    'victoria-reminder-dispatch',
-    '* * * * *',
-    $$
-    select
-      net.http_get(
-        url := (select decrypted_secret from vault.decrypted_secrets where name = 'victoria_app_url')
-          || '/api/reminders/dispatch',
-        headers := jsonb_build_object(
-          'Authorization',
-          'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'victoria_cron_secret')
-        )
-      );
-    $$
-  );
-```
-
-This calls the existing dispatch route once per minute.
-
-## 6. Verify the cron job
+## 4. Verify the cron job
 
 You can inspect jobs with:
 
@@ -93,7 +72,7 @@ order by start_time desc
 limit 20;
 ```
 
-## 7. Manual test
+## 5. Manual test
 
 After deploying:
 
@@ -109,3 +88,5 @@ After deploying:
 - This path avoids Vercel Pro cron costs.
 - Closed-app reminders still require push permission plus browser/platform support.
 - The dispatch route already protects itself with `CRON_SECRET`.
+- If you only use Victoria in a normal web tab, reminders are most reliable while the browser is open.
+- For real closed-app reminders, the best path is the installed PWA with notifications allowed.
