@@ -95,9 +95,18 @@ export default function ChatPage() {
     if (activeSphere !== 'daily') {
       setActiveSphere('daily');
     }
+    let morningPrompt = '';
+    try {
+      morningPrompt = sessionStorage.getItem('victoria-morning-chat-briefing') || '';
+      sessionStorage.removeItem('victoria-morning-chat-briefing');
+    } catch {
+      // non-critical
+    }
     setInput((prev) =>
       prev ||
-      'Good morning, Victoria. Give me my morning briefing, help me organize today, and suggest the best first task.'
+      (morningPrompt
+        ? `Continue my morning routine from this briefing:\n${morningPrompt}\n\nHelp me turn it into a clear plan for today and suggest the best first task.`
+        : 'Good morning, Victoria. Give me my morning briefing, help me organize today, and suggest the best first task.')
     );
   }, [activeSphere, setActiveSphere]);
 

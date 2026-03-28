@@ -495,7 +495,7 @@ export default function SettingsPage() {
                 </div>
 
                 <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  Saved now for your morning flow. Live weather and news can plug into these preferences next.
+                  Location and weather now feed the live morning briefing. News topics are still saved as preferences for future live news integration.
                 </p>
               </SettingsSection>
             </div>
