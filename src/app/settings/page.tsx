@@ -389,8 +389,8 @@ export default function SettingsPage() {
                 </div>
               </SettingsSection>
 
-              {/* Tamagotchi Colors */}
-              <SettingsSection title="Tamagotchi Colors">
+              {/* Companion Colors */}
+              <SettingsSection title="Companion Colors">
                 <div className="flex gap-3 items-end">
                   <div className="flex-1">
                     <p className="font-pixel text-[6px] mb-2" style={{ color: 'var(--text-muted)' }}>SHELL</p>
@@ -483,7 +483,7 @@ export default function SettingsPage() {
                 />
                 {settings.notificationsEnabled && (
                   <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                    Morning alarm set for {settings.wakeUpTime}. Install as PWA for background alerts.
+                    Morning alarm and reminders will use the installed PWA notifications when available.
                   </p>
                 )}
                 {!settings.notificationsEnabled && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied' && (

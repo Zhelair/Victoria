@@ -7,6 +7,8 @@ import { useVictoriaStore } from '@/store';
 import { AppShell } from '@/components/layout/AppShell';
 import { db } from '@/lib/db';
 import { buildCompanionContext } from '@/lib/companion-context';
+import { createReminderFromDraft, getReminderSuccessMessage } from '@/lib/reminder-client';
+import { detectReminderDraftFromText, type ReminderDraft } from '@/lib/reminders';
 import { applyScoringRule, detectScoringRuleFromText, getRuleScoreDelta } from '@/lib/scoring';
 import { extractFileContent, formatFileSize, SUPPORTED_FILE_TYPES, MAX_FILE_SIZE, truncate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
@@ -42,6 +44,8 @@ export default function ChatPage() {
     sourceText: string;
   } | null>(null);
   const [ruleSuggestionFeedback, setRuleSuggestionFeedback] = useState<string | null>(null);
+  const [pendingReminderSuggestion, setPendingReminderSuggestion] = useState<ReminderDraft | null>(null);
+  const [reminderSuggestionFeedback, setReminderSuggestionFeedback] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -97,13 +101,18 @@ export default function ChatPage() {
   useEffect(() => {
     setPendingRuleSuggestion(null);
     setRuleSuggestionFeedback(null);
+    setPendingReminderSuggestion(null);
+    setReminderSuggestionFeedback(null);
   }, [activeSphere, activeThreadId]);
 
   useEffect(() => {
-    if (!ruleSuggestionFeedback) return;
-    const timeout = window.setTimeout(() => setRuleSuggestionFeedback(null), 2500);
+    if (!ruleSuggestionFeedback && !reminderSuggestionFeedback) return;
+    const timeout = window.setTimeout(() => {
+      setRuleSuggestionFeedback(null);
+      setReminderSuggestionFeedback(null);
+    }, 2500);
     return () => window.clearTimeout(timeout);
-  }, [ruleSuggestionFeedback]);
+  }, [ruleSuggestionFeedback, reminderSuggestionFeedback]);
 
   useEffect(() => {
     if (starterAppliedRef.current) return;
@@ -209,6 +218,7 @@ export default function ChatPage() {
       settings.chatScoreConfirmationsEnabled && typedInput
         ? detectScoringRuleFromText(typedInput, scoringRules)
         : null;
+    const detectedReminder = typedInput ? detectReminderDraftFromText(typedInput) : null;
 
     const userMsg: ChatMessage = {
       id: uuidv4(),
@@ -236,6 +246,12 @@ export default function ChatPage() {
       });
     } else {
       setPendingRuleSuggestion(null);
+    }
+
+    if (detectedReminder) {
+      setPendingReminderSuggestion(detectedReminder);
+    } else {
+      setPendingReminderSuggestion(null);
     }
 
     // Update message count
@@ -383,6 +399,23 @@ export default function ChatPage() {
   const dismissPendingRuleSuggestion = () => {
     setPendingRuleSuggestion(null);
     setRuleSuggestionFeedback('Score suggestion ignored.');
+  };
+
+  const createPendingReminder = async () => {
+    if (!pendingReminderSuggestion) return;
+
+    try {
+      const reminder = await createReminderFromDraft(pendingReminderSuggestion);
+      setReminderSuggestionFeedback(`Reminder saved: ${getReminderSuccessMessage(reminder)}`);
+      setPendingReminderSuggestion(null);
+    } catch (error: any) {
+      setReminderSuggestionFeedback(error.message || 'Could not create reminder.');
+    }
+  };
+
+  const dismissPendingReminder = () => {
+    setPendingReminderSuggestion(null);
+    setReminderSuggestionFeedback('Reminder suggestion ignored.');
   };
 
   const speak = (text: string) => {
@@ -627,7 +660,7 @@ export default function ChatPage() {
           </div>
         )}
 
-        {(pendingRuleSuggestion || ruleSuggestionFeedback) && (
+        {(pendingRuleSuggestion || ruleSuggestionFeedback || pendingReminderSuggestion || reminderSuggestionFeedback) && (
           <div
             className="mx-3 mb-2 p-3 rounded-2xl space-y-2"
             style={{
@@ -674,6 +707,46 @@ export default function ChatPage() {
             {!pendingRuleSuggestion && ruleSuggestionFeedback && (
               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
                 {ruleSuggestionFeedback}
+              </p>
+            )}
+
+            {pendingReminderSuggestion && (
+              <>
+                <div className="space-y-1 pt-1 border-t" style={{ borderColor: 'var(--border)' }}>
+                  <p className="font-pixel text-[7px]" style={{ color: 'var(--accent)' }}>
+                    Reminder Suggestion
+                  </p>
+                  <p className="text-xs leading-relaxed" style={{ color: 'var(--text)' }}>
+                    Create reminder <span className="font-semibold">{pendingReminderSuggestion.title}</span>{' '}
+                    for {new Date(pendingReminderSuggestion.scheduledFor).toLocaleString()}?
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={createPendingReminder}
+                    className="flex-1 py-2 rounded-xl font-pixel text-[7px] text-white transition-all active:scale-95"
+                    style={{ backgroundColor: 'var(--accent)' }}
+                  >
+                    Create
+                  </button>
+                  <button
+                    onClick={dismissPendingReminder}
+                    className="px-3 py-2 rounded-xl font-pixel text-[7px] transition-all active:scale-95"
+                    style={{
+                      backgroundColor: 'var(--shell)',
+                      color: 'var(--text-muted)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    Ignore
+                  </button>
+                </div>
+              </>
+            )}
+
+            {!pendingReminderSuggestion && reminderSuggestionFeedback && (
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                {reminderSuggestionFeedback}
               </p>
             )}
           </div>

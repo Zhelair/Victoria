@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { getDateKeyDaysAgo, getTodayDateKey } from '@/lib/utils';
-import type { AppSettings, ChatSphere, Goal, LogEntry, TodoItem } from '@/types';
+import type { AppSettings, ChatSphere, Goal, LogEntry, Reminder, TodoItem } from '@/types';
 
 function formatGoal(goal: Goal) {
   const target = goal.targetDate ? ` (target ${goal.targetDate})` : '';
@@ -51,10 +51,11 @@ export async function buildCompanionContext({
   const today = getTodayDateKey();
   const startDate = getDateKeyDaysAgo(14);
 
-  const [pendingTodos, activeGoals, activePlan, recentLogs] = await Promise.all([
+  const [pendingTodos, activeGoals, activePlan, activeReminders, recentLogs] = await Promise.all([
     db.todos.orderBy('createdAt').filter((todo) => !todo.done).toArray(),
     db.goals.filter((goal) => !goal.done).toArray(),
     db.fitnessPlans.filter((plan) => plan.active).first(),
+    db.reminders.filter((reminder) => reminder.active).toArray(),
     db.logEntries.where('date').between(startDate, today, true, true).reverse().sortBy('timestamp'),
   ]);
 
@@ -89,6 +90,12 @@ export async function buildCompanionContext({
     lines.push(...prioritizedTodos.map(formatTodo));
   } else {
     lines.push('Pending todos: none saved right now.');
+  }
+
+  if (activeReminders.length > 0) {
+    lines.push(`Active reminders: ${activeReminders.slice(0, 4).map((reminder: Reminder) => reminder.title).join(', ')}.`);
+  } else {
+    lines.push('Active reminders: none saved right now.');
   }
 
   if (activePlan) {

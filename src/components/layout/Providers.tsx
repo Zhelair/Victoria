@@ -91,5 +91,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
     i18n.changeLanguage(language);
   }, [language]);
 
+  useEffect(() => {
+    const notificationsEnabled = useVictoriaStore.getState().settings.notificationsEnabled;
+    if (!notificationsEnabled) return;
+
+    import('@/lib/reminder-client')
+      .then(async ({ bootstrapReminderPush, syncRemindersFromServer }) => {
+        await bootstrapReminderPush().catch(() => {
+          // Keep app usable when push setup is unavailable.
+        });
+        await syncRemindersFromServer().catch(() => {
+          // Keep app usable when the remote reminder mirror is unavailable.
+        });
+      })
+      .catch(() => {
+        // Ignore reminder bootstrap failures.
+      });
+  }, []);
+
   return <>{children}</>;
 }
