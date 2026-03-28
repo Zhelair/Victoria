@@ -170,6 +170,31 @@ export interface FitnessPlan {
   sourceSummary?: string;
 }
 
+export type ReminderRepeat = 'once' | 'daily' | 'weekdays' | 'weekly';
+
+export type ReminderCategory = 'personal' | 'health' | 'work' | 'errand' | 'habit';
+
+export type ReminderSoundMode = 'default' | 'silent';
+
+export interface Reminder {
+  id: string;
+  title: string;
+  note?: string;
+  scheduledFor: string;
+  nextTriggerAt: string;
+  repeat: ReminderRepeat;
+  category: ReminderCategory;
+  sound: ReminderSoundMode;
+  voicePreferred: boolean;
+  timeZone: string;
+  active: boolean;
+  createdAt: number;
+  updatedAt: number;
+  lastTriggeredAt?: string;
+  completedAt?: string;
+  syncState?: 'pending' | 'synced' | 'error';
+}
+
 export interface TodoItem {
   id: string;
   text: string;

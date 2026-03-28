@@ -1,18 +1,51 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { v4 as uuidv4 } from 'uuid';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AppShell } from '@/components/layout/AppShell';
 import { db } from '@/lib/db';
 import { createFitnessPlan, DEFAULT_FITNESS_PROFILE, FITNESS_SOURCE_LINKS } from '@/lib/fitness-plan';
+import {
+  bootstrapReminderPush,
+  createReminderFromDraft,
+  patchReminder,
+  removeReminder,
+  sendReminderAction,
+  syncRemindersFromServer,
+} from '@/lib/reminder-client';
+import {
+  buildReminderSummary,
+  getBrowserTimeZone,
+  REMINDER_CATEGORY_OPTIONS,
+  REMINDER_REPEAT_OPTIONS,
+  REMINDER_SOUND_OPTIONS,
+} from '@/lib/reminders';
 import { cn, getTodayDateKey } from '@/lib/utils';
-import type { FitnessDay, FitnessPlanProfile, Goal, TodoItem } from '@/types';
+import { useVictoriaStore } from '@/store';
+import type {
+  FitnessDay,
+  FitnessPlanProfile,
+  Goal,
+  Reminder,
+  ReminderCategory,
+  ReminderRepeat,
+  ReminderSoundMode,
+  TodoItem,
+} from '@/types';
 
 export default function PlansPage() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'fitness' | 'todos' | 'goals'>('fitness');
+  const [activeTab, setActiveTab] = useState<'fitness' | 'todos' | 'goals' | 'reminders'>('fitness');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const nextTab = new URLSearchParams(window.location.search).get('tab');
+    if (nextTab === 'fitness' || nextTab === 'todos' || nextTab === 'goals' || nextTab === 'reminders') {
+      setActiveTab(nextTab);
+    }
+  }, []);
 
   return (
     <AppShell>
@@ -21,7 +54,7 @@ export default function PlansPage() {
           className="flex border-b border-theme px-3 pt-3"
           style={{ backgroundColor: 'var(--card-bg)' }}
         >
-          {(['fitness', 'todos', 'goals'] as const).map((tab) => (
+          {(['fitness', 'todos', 'goals', 'reminders'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -34,7 +67,13 @@ export default function PlansPage() {
                 borderColor: activeTab === tab ? 'var(--accent)' : 'transparent',
               }}
             >
-              {tab === 'fitness' ? t('plans.fitnessPlan') : tab === 'todos' ? t('plans.todos') : t('plans.goals')}
+              {tab === 'fitness'
+                ? t('plans.fitnessPlan')
+                : tab === 'todos'
+                  ? t('plans.todos')
+                  : tab === 'goals'
+                    ? t('plans.goals')
+                    : 'Reminders'}
             </button>
           ))}
         </div>
@@ -43,6 +82,7 @@ export default function PlansPage() {
           {activeTab === 'fitness' && <FitnessTab />}
           {activeTab === 'todos' && <TodosTab />}
           {activeTab === 'goals' && <GoalsTab />}
+          {activeTab === 'reminders' && <RemindersTab />}
         </div>
       </div>
     </AppShell>
@@ -596,6 +636,521 @@ function DayCard({
           + add
         </button>
       )}
+    </div>
+  );
+}
+
+function toDateTimeLocalValue(iso: string) {
+  const date = new Date(iso);
+  const timezoneOffset = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
+}
+
+function RemindersTab() {
+  const { i18n } = useTranslation();
+  const settings = useVictoriaStore((s) => s.settings);
+  const reminders = useLiveQuery(() => db.reminders.orderBy('nextTriggerAt').toArray(), []);
+  const [title, setTitle] = useState('');
+  const [note, setNote] = useState('');
+  const [scheduledAt, setScheduledAt] = useState(() => {
+    const oneHour = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    return toDateTimeLocalValue(oneHour);
+  });
+  const [repeat, setRepeat] = useState<ReminderRepeat>('once');
+  const [category, setCategory] = useState<ReminderCategory>('personal');
+  const [sound, setSound] = useState<ReminderSoundMode>('default');
+  const [voicePreferred, setVoicePreferred] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [highlightedReminderId, setHighlightedReminderId] = useState<string | null>(null);
+  const [shouldSpeak, setShouldSpeak] = useState(false);
+
+  const activeReminders = (reminders ?? []).filter((reminder) => reminder.active);
+  const pausedReminders = (reminders ?? []).filter((reminder) => !reminder.active);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    setHighlightedReminderId(params.get('reminder'));
+    setShouldSpeak(params.get('speak') === '1');
+  }, []);
+
+  const refreshReminders = async () => {
+    setIsSyncing(true);
+    const syncResult = await syncRemindersFromServer().catch((syncError: Error) => ({
+      ok: false as const,
+      reason: syncError.message,
+    }));
+    if (!syncResult.ok) {
+      setError(syncResult.reason === 'Reminder backend is not configured yet.'
+        ? 'Configure Supabase + VAPID keys to turn on real push reminders.'
+        : String(syncResult.reason));
+    } else {
+      setError(null);
+    }
+    setIsSyncing(false);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      if (settings.notificationsEnabled) {
+        const bootstrap = await bootstrapReminderPush().catch((bootstrapError: Error) => ({
+          ok: false as const,
+          reason: bootstrapError.message,
+        }));
+        if (!cancelled && !bootstrap.ok && bootstrap.reason !== 'permission-denied' && bootstrap.reason !== 'missing-vapid-key') {
+          setError(String(bootstrap.reason));
+        }
+      }
+
+      if (!cancelled) {
+        await refreshReminders();
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.notificationsEnabled]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!settings.voiceEnabled || !shouldSpeak) return;
+    if (!('speechSynthesis' in window)) return;
+    if (!highlightedReminderId || !reminders?.length) return;
+
+    const reminder = reminders.find((entry) => entry.id === highlightedReminderId);
+    if (!reminder || !reminder.voicePreferred) return;
+
+    const utterance = new SpeechSynthesisUtterance(
+      `${reminder.title}.${reminder.note ? ` ${reminder.note}` : ''}`
+    );
+    utterance.rate = settings.voiceRate;
+    utterance.pitch = settings.voicePitch;
+    utterance.lang = settings.language;
+    if (settings.selectedVoiceName) {
+      const voice = window.speechSynthesis.getVoices().find((entry) => entry.name === settings.selectedVoiceName);
+      if (voice) utterance.voice = voice;
+    }
+
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete('speak');
+    window.history.replaceState({}, '', url.toString());
+    setShouldSpeak(false);
+  }, [
+    highlightedReminderId,
+    reminders,
+    settings.language,
+    settings.selectedVoiceName,
+    settings.voiceEnabled,
+    settings.voicePitch,
+    settings.voiceRate,
+    shouldSpeak,
+  ]);
+
+  const handleCreateReminder = async () => {
+    setStatus(null);
+    setError(null);
+    if (!title.trim()) {
+      setError('Add a reminder title first.');
+      return;
+    }
+
+    const scheduledDate = new Date(scheduledAt);
+    if (Number.isNaN(scheduledDate.getTime())) {
+      setError('Pick a valid reminder time.');
+      return;
+    }
+
+    if (repeat === 'once' && scheduledDate.getTime() <= Date.now()) {
+      setError('Pick a future time for one-time reminders.');
+      return;
+    }
+
+    if (settings.notificationsEnabled) {
+      await bootstrapReminderPush().catch(() => {
+        // Allow creating the reminder even if push bootstrap fails.
+      });
+    }
+
+    try {
+      const reminder = await createReminderFromDraft({
+        title: title.trim(),
+        note: note.trim() || undefined,
+        scheduledFor: scheduledDate.toISOString(),
+        repeat,
+        category,
+        sound,
+        voicePreferred,
+        timeZone: getBrowserTimeZone(),
+      });
+
+      setTitle('');
+      setNote('');
+      setRepeat('once');
+      setCategory('personal');
+      setSound('default');
+      setVoicePreferred(false);
+      const oneHour = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      setScheduledAt(toDateTimeLocalValue(oneHour));
+      setStatus(`Saved reminder: ${buildReminderSummary(reminder, i18n.language)}`);
+    } catch (createError: any) {
+      setError(createError.message || 'Could not create reminder.');
+    }
+  };
+
+  const handleToggleActive = async (reminder: Reminder) => {
+    setError(null);
+    try {
+      await patchReminder(reminder.id, { active: !reminder.active });
+    } catch (toggleError: any) {
+      setError(toggleError.message || 'Could not update reminder.');
+    }
+  };
+
+  const handleReminderAction = async (reminderId: string, action: 'done' | 'snooze') => {
+    setError(null);
+    try {
+      await sendReminderAction(reminderId, action);
+      setStatus(action === 'done' ? 'Reminder updated.' : 'Reminder snoozed for 15 minutes.');
+    } catch (actionError: any) {
+      setError(actionError.message || 'Could not update reminder.');
+    }
+  };
+
+  const handleDeleteReminder = async (reminderId: string) => {
+    setError(null);
+    try {
+      await removeReminder(reminderId);
+      setStatus('Reminder deleted.');
+    } catch (deleteError: any) {
+      setError(deleteError.message || 'Could not delete reminder.');
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="card p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-pixel text-[8px]" style={{ color: 'var(--accent)' }}>
+              Real reminder center
+            </h3>
+            <p className="text-xs mt-2 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              Reminder text is encrypted before it leaves this device. Victoria stores only ciphertext remotely so reminders can still fire when the app is closed.
+            </p>
+          </div>
+          <button
+            onClick={() => void refreshReminders()}
+            className="px-3 py-2 rounded-xl font-pixel text-[7px]"
+            style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+          >
+            {isSyncing ? 'Syncing...' : 'Refresh'}
+          </button>
+        </div>
+
+        {!settings.notificationsEnabled && (
+          <p className="text-[11px] leading-relaxed" style={{ color: '#f59e0b' }}>
+            Turn on notifications in Settings so reminders can wake the installed app in the background.
+          </p>
+        )}
+
+        {error && (
+          <p className="text-[11px] leading-relaxed" style={{ color: '#ef4444' }}>
+            {error}
+          </p>
+        )}
+
+        {status && (
+          <p className="text-[11px] leading-relaxed" style={{ color: '#15803d' }}>
+            {status}
+          </p>
+        )}
+      </div>
+
+      <div className="card p-4 space-y-4">
+        <div>
+          <h3 className="font-pixel text-[8px]" style={{ color: 'var(--text-muted)' }}>
+            Create reminder
+          </h3>
+        </div>
+
+        <input
+          type="text"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Buy toilet paper"
+          className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+          style={{
+            backgroundColor: 'var(--shell)',
+            color: 'var(--text)',
+            border: '1px solid var(--border)',
+          }}
+        />
+
+        <textarea
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="Optional note"
+          className="w-full px-3 py-2 rounded-xl text-sm outline-none min-h-[90px]"
+          style={{
+            backgroundColor: 'var(--shell)',
+            color: 'var(--text)',
+            border: '1px solid var(--border)',
+          }}
+        />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="space-y-2">
+            <span className="font-pixel text-[7px]" style={{ color: 'var(--text-muted)' }}>
+              When
+            </span>
+            <input
+              type="datetime-local"
+              value={scheduledAt}
+              onChange={(event) => setScheduledAt(event.target.value)}
+              className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+              style={{
+                backgroundColor: 'var(--shell)',
+                color: 'var(--text)',
+                border: '1px solid var(--border)',
+              }}
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="font-pixel text-[7px]" style={{ color: 'var(--text-muted)' }}>
+              Repeat
+            </span>
+            <select
+              value={repeat}
+              onChange={(event) => setRepeat(event.target.value as ReminderRepeat)}
+              className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+              style={{
+                backgroundColor: 'var(--shell)',
+                color: 'var(--text)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {REMINDER_REPEAT_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-2">
+            <span className="font-pixel text-[7px]" style={{ color: 'var(--text-muted)' }}>
+              Category
+            </span>
+            <select
+              value={category}
+              onChange={(event) => setCategory(event.target.value as ReminderCategory)}
+              className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+              style={{
+                backgroundColor: 'var(--shell)',
+                color: 'var(--text)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {REMINDER_CATEGORY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="space-y-2">
+            <span className="font-pixel text-[7px]" style={{ color: 'var(--text-muted)' }}>
+              Notification sound
+            </span>
+            <select
+              value={sound}
+              onChange={(event) => setSound(event.target.value as ReminderSoundMode)}
+              className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+              style={{
+                backgroundColor: 'var(--shell)',
+                color: 'var(--text)',
+                border: '1px solid var(--border)',
+              }}
+            >
+              {REMINDER_SOUND_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <button
+          onClick={() => setVoicePreferred((prev) => !prev)}
+          className="w-full px-3 py-2 rounded-xl font-pixel text-[7px] transition-all active:scale-95"
+          style={{
+            backgroundColor: voicePreferred ? 'var(--accent)' : 'var(--shell)',
+            color: voicePreferred ? 'white' : 'var(--text-muted)',
+            border: `1px solid ${voicePreferred ? 'var(--accent)' : 'var(--border)'}`,
+          }}
+        >
+          {voicePreferred ? 'Voice-preferred reminder' : 'Keep as text-only reminder'}
+        </button>
+
+        <button
+          onClick={() => void handleCreateReminder()}
+          className="w-full py-3 rounded-xl font-pixel text-[8px] text-white transition-all active:scale-95"
+          style={{ backgroundColor: 'var(--accent)' }}
+        >
+          Save reminder
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <p className="font-pixel text-[7px] mb-2" style={{ color: 'var(--text-muted)' }}>
+            Active reminders ({activeReminders.length})
+          </p>
+          <div className="space-y-3">
+            {activeReminders.length === 0 ? (
+              <div className="card p-4">
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  No active reminders yet.
+                </p>
+              </div>
+            ) : (
+              activeReminders.map((reminder) => (
+                <ReminderCard
+                  key={reminder.id}
+                  reminder={reminder}
+                  highlighted={highlightedReminderId === reminder.id}
+                  locale={i18n.language}
+                  onToggleActive={() => void handleToggleActive(reminder)}
+                  onDone={() => void handleReminderAction(reminder.id, 'done')}
+                  onSnooze={() => void handleReminderAction(reminder.id, 'snooze')}
+                  onDelete={() => void handleDeleteReminder(reminder.id)}
+                />
+              ))
+            )}
+          </div>
+        </div>
+
+        {pausedReminders.length > 0 && (
+          <div>
+            <p className="font-pixel text-[7px] mb-2" style={{ color: 'var(--text-muted)' }}>
+              Paused reminders ({pausedReminders.length})
+            </p>
+            <div className="space-y-3">
+              {pausedReminders.map((reminder) => (
+                <ReminderCard
+                  key={reminder.id}
+                  reminder={reminder}
+                  highlighted={highlightedReminderId === reminder.id}
+                  locale={i18n.language}
+                  onToggleActive={() => void handleToggleActive(reminder)}
+                  onDone={() => void handleReminderAction(reminder.id, 'done')}
+                  onSnooze={() => void handleReminderAction(reminder.id, 'snooze')}
+                  onDelete={() => void handleDeleteReminder(reminder.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReminderCard({
+  reminder,
+  highlighted,
+  locale,
+  onToggleActive,
+  onDone,
+  onSnooze,
+  onDelete,
+}: {
+  reminder: Reminder;
+  highlighted: boolean;
+  locale: string;
+  onToggleActive: () => void;
+  onDone: () => void;
+  onSnooze: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className="card p-4 space-y-3"
+      style={{
+        border: highlighted ? '2px solid var(--accent)' : '1px solid var(--border)',
+        boxShadow: highlighted ? '0 0 0 3px rgba(46, 120, 92, 0.12)' : undefined,
+        opacity: reminder.active ? 1 : 0.72,
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-pixel text-[8px]" style={{ color: 'var(--text)' }}>
+            {reminder.title}
+          </h3>
+          <p className="text-[11px] mt-2 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+            {buildReminderSummary(reminder, locale)}
+          </p>
+        </div>
+        <button
+          onClick={onToggleActive}
+          className="px-3 py-2 rounded-xl font-pixel text-[7px]"
+          style={{
+            backgroundColor: reminder.active ? 'var(--shell)' : 'var(--accent)',
+            color: reminder.active ? 'var(--text-muted)' : 'white',
+          }}
+        >
+          {reminder.active ? 'Pause' : 'Resume'}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Badge>{reminder.category}</Badge>
+        <Badge>{reminder.repeat}</Badge>
+        <Badge>{reminder.sound === 'silent' ? 'silent' : 'sound on'}</Badge>
+        {reminder.voicePreferred ? <Badge>voice</Badge> : null}
+      </div>
+
+      {reminder.note ? (
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--text)' }}>
+          {reminder.note}
+        </p>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={onDone}
+          className="px-3 py-2 rounded-xl font-pixel text-[7px] text-white"
+          style={{ backgroundColor: 'var(--accent)' }}
+        >
+          Done
+        </button>
+        <button
+          onClick={onSnooze}
+          className="px-3 py-2 rounded-xl font-pixel text-[7px]"
+          style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+        >
+          Snooze 15m
+        </button>
+        <button
+          onClick={onDelete}
+          className="px-3 py-2 rounded-xl font-pixel text-[7px]"
+          style={{ backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444' }}
+        >
+          Delete
+        </button>
+      </div>
     </div>
   );
 }

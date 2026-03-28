@@ -5,6 +5,7 @@ import type {
   LogEntry,
   ChatThread,
   FitnessPlan,
+  Reminder,
   TodoItem,
   Goal,
   SaveSlot,
@@ -18,6 +19,7 @@ export class VictoriaDB extends Dexie {
   logEntries!: Table<LogEntry>;
   chatThreads!: Table<ChatThread>;
   fitnessPlans!: Table<FitnessPlan>;
+  reminders!: Table<Reminder>;
   todos!: Table<TodoItem>;
   goals!: Table<Goal>;
   saveSlots!: Table<SaveSlot>;
@@ -33,6 +35,7 @@ export class VictoriaDB extends Dexie {
       logEntries: 'id, date, category, timestamp',
       chatThreads: 'id, sphere, updatedAt',
       fitnessPlans: 'id, active, startDate',
+      reminders: 'id, active, nextTriggerAt, category, updatedAt',
       todos: 'id, done, sphere, dueDate',
       goals: 'id, horizon, done',
       saveSlots: 'slot',
@@ -44,6 +47,20 @@ export class VictoriaDB extends Dexie {
     // v2: add createdAt index to todos so orderBy('createdAt') works
     this.version(2).stores({
       todos: 'id, done, sphere, dueDate, createdAt',
+    });
+
+    this.version(3).stores({
+      dailyLogs: 'id, date, checkinDone',
+      logEntries: 'id, date, category, timestamp',
+      chatThreads: 'id, sphere, updatedAt',
+      fitnessPlans: 'id, active, startDate',
+      reminders: 'id, active, nextTriggerAt, category, updatedAt',
+      todos: 'id, done, sphere, dueDate, createdAt',
+      goals: 'id, horizon, done',
+      saveSlots: 'slot',
+      settings: 'id',
+      scoringRules: 'id, type, category, enabled',
+      logCategories: 'id, enabled',
     });
   }
 }

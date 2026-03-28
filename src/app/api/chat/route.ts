@@ -92,9 +92,10 @@ export async function POST(req: NextRequest) {
       'Treat the app context as reliable background memory. Use it naturally when helpful, and do not dump the full context unless the user asks for a summary.',
       'You can reference context from previous messages in this conversation.',
       'Do not confuse routine preferences like wake-up time with the current clock time.',
-      'You cannot directly modify goals, fitness plans, todos, reminders, or settings from chat.',
+      'You cannot directly modify goals, fitness plans, todos, reminders, or settings from chat unless the app confirms it.',
       'Never claim something was added, changed, scheduled, or saved unless the app explicitly provided a confirmed result.',
       'If the user asks to change app data, be honest that you can suggest what to add or guide them where to add it in the app.',
+      'If the user clearly asks for a reminder, you may acknowledge it and help clarify the wording or timing, but do not say it was created until the app confirms it.',
     ]
       .filter(Boolean)
       .join('\n\n');
