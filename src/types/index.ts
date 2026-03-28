@@ -139,10 +139,23 @@ export interface ChatThread {
 export interface FitnessDay {
   day: number;
   date?: string;
-  workoutType: 'rest' | 'home' | 'outdoor';
+  workoutType: 'rest' | 'home' | 'outdoor' | 'gym';
+  title?: string;
   exercises: string[];
   done: boolean;
+  durationMin?: number;
+  intensity?: 'easy' | 'steady' | 'push';
+  coachNote?: string;
   notes?: string;
+}
+
+export interface FitnessPlanProfile {
+  environment: 'home' | 'gym' | 'outdoor';
+  intensity: 'easy' | 'steady' | 'push';
+  goal: 'consistency' | 'strength' | 'fat-loss' | 'energy';
+  cardioPreference: 'walk' | 'run' | 'cycle' | 'swim' | 'mixed';
+  swimAllowed: boolean;
+  workoutsPerWeek: 3 | 4 | 5;
 }
 
 export interface FitnessPlan {
@@ -152,6 +165,8 @@ export interface FitnessPlan {
   startDate: string;
   days: FitnessDay[];
   active: boolean;
+  profile?: FitnessPlanProfile;
+  sourceSummary?: string;
 }
 
 export interface TodoItem {

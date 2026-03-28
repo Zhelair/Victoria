@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { v4 as uuidv4 } from 'uuid';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AppShell } from '@/components/layout/AppShell';
 import { db } from '@/lib/db';
-import { cn, getTodayDateKey } from '@/lib/utils';
-import type { FitnessDay, FitnessPlan, TodoItem, Goal } from '@/types';
+import { createFitnessPlan, DEFAULT_FITNESS_PROFILE, FITNESS_SOURCE_LINKS } from '@/lib/fitness-plan';
+import { cn } from '@/lib/utils';
+import type { FitnessDay, FitnessPlanProfile, Goal, TodoItem } from '@/types';
 
 export default function PlansPage() {
   const { t } = useTranslation();
@@ -16,7 +17,6 @@ export default function PlansPage() {
   return (
     <AppShell>
       <div className="flex flex-col h-full">
-        {/* Tabs */}
         <div
           className="flex border-b border-theme px-3 pt-3"
           style={{ backgroundColor: 'var(--card-bg)' }}
@@ -27,9 +27,7 @@ export default function PlansPage() {
               onClick={() => setActiveTab(tab)}
               className={cn(
                 'px-4 py-2 font-pixel text-[7px] rounded-t-lg transition-colors',
-                activeTab === tab
-                  ? 'border-b-2'
-                  : 'opacity-50'
+                activeTab === tab ? 'border-b-2' : 'opacity-50'
               )}
               style={{
                 color: activeTab === tab ? 'var(--accent)' : 'var(--text-muted)',
@@ -51,132 +49,209 @@ export default function PlansPage() {
   );
 }
 
-// ─── Fitness Tab ──────────────────────────────────────────────────────────────
-
 function FitnessTab() {
   const { t } = useTranslation();
   const plans = useLiveQuery(() => db.fitnessPlans.toArray(), []);
-  const activePlan = plans?.find((p) => !!p.active);
-  const [showNewPlan, setShowNewPlan] = useState(false);
-  const [newPlanTitle, setNewPlanTitle] = useState('');
+  const activePlan = plans?.find((plan) => plan.active);
+  const [showBuilder, setShowBuilder] = useState(false);
+  const [customTitle, setCustomTitle] = useState('');
+  const [profile, setProfile] = useState<FitnessPlanProfile>(DEFAULT_FITNESS_PROFILE);
+
+  const nextDayIndex = useMemo(() => {
+    if (!activePlan?.days?.length) return -1;
+    const firstPending = activePlan.days.findIndex((day) => !day.done);
+    return firstPending === -1 ? activePlan.days.length - 1 : firstPending;
+  }, [activePlan]);
+
+  const nextDay = nextDayIndex >= 0 && activePlan ? activePlan.days[nextDayIndex] : null;
+  const completedCount = activePlan?.days.filter((day) => day.done).length ?? 0;
+  const strengthCount = activePlan?.days.filter((day) => ['home', 'gym', 'outdoor'].includes(day.workoutType) && day.title?.startsWith('Strength')).length ?? 0;
+  const cardioCount = activePlan?.days.filter((day) => day.title?.toLowerCase().includes('cardio')).length ?? 0;
 
   const createPlan = async () => {
-    if (!newPlanTitle.trim()) return;
-
-    // Deactivate any existing active plan
     if (activePlan) {
       await db.fitnessPlans.update(activePlan.id, { active: false as unknown as boolean });
     }
 
-    const days: FitnessDay[] = Array.from({ length: 14 }, (_, i) => ({
-      day: i + 1,
-      workoutType: i % 7 === 0 || i % 7 === 3 ? 'rest' : 'home',
-      exercises: [],
-      done: false,
-    }));
-
-    const plan: FitnessPlan = {
-      id: uuidv4(),
-      title: newPlanTitle,
-      createdAt: Date.now(),
-      startDate: getTodayDateKey(),
-      days,
-      active: true,
-    };
-
+    const plan = createFitnessPlan(profile, customTitle);
     await db.fitnessPlans.add(plan);
-    setNewPlanTitle('');
-    setShowNewPlan(false);
+
+    setCustomTitle('');
+    setProfile(DEFAULT_FITNESS_PROFILE);
+    setShowBuilder(false);
   };
 
   const toggleDay = async (planId: string, dayIndex: number) => {
     const plan = await db.fitnessPlans.get(planId);
     if (!plan) return;
-    const days = plan.days.map((d, i) =>
-      i === dayIndex ? { ...d, done: !d.done } : d
+
+    const days = plan.days.map((day, index) =>
+      index === dayIndex ? { ...day, done: !day.done } : day
     );
+
     await db.fitnessPlans.update(planId, { days });
   };
 
   return (
     <div className="space-y-4">
-      {!activePlan && !showNewPlan && (
-        <div className="card p-6 text-center space-y-4">
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-            {t('plans.noPlan')}
-          </p>
+      <div className="card p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-pixel text-[9px]" style={{ color: 'var(--accent)' }}>
+              Research-backed 14-day plan
+            </h3>
+            <p className="text-xs mt-2 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              Conservative presets built around steady movement, at least two strength sessions each week, and realistic recovery days.
+            </p>
+          </div>
           <button
-            onClick={() => setShowNewPlan(true)}
-            className="px-4 py-2 rounded-xl font-pixel text-[8px] text-white"
-            style={{ backgroundColor: 'var(--accent)' }}
+            onClick={() => setShowBuilder((prev) => !prev)}
+            className="px-3 py-2 rounded-xl font-pixel text-[7px] transition-all active:scale-95"
+            style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
           >
-            + {t('plans.newPlan')}
+            {showBuilder ? t('common.cancel') : `+ ${t('plans.newPlan')}`}
           </button>
         </div>
-      )}
 
-      {showNewPlan && (
-        <div className="card p-4 space-y-3">
-          <h3 className="font-pixel text-[9px]" style={{ color: 'var(--text)' }}>
-            {t('plans.newPlan')}
-          </h3>
-          <input
-            type="text"
-            value={newPlanTitle}
-            onChange={(e) => setNewPlanTitle(e.target.value)}
-            placeholder="e.g. 2-Week Shred"
-            className="w-full px-3 py-2 rounded-xl text-sm outline-none"
-            style={{
-              backgroundColor: 'var(--shell)',
-              color: 'var(--text)',
-              border: '1px solid var(--border)',
-            }}
-            onKeyDown={(e) => e.key === 'Enter' && createPlan()}
-            autoFocus
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={createPlan}
-              className="flex-1 py-2 rounded-xl font-pixel text-[8px] text-white"
-              style={{ backgroundColor: 'var(--accent)' }}
-            >
-              {t('common.save')}
-            </button>
-            <button
-              onClick={() => setShowNewPlan(false)}
-              className="px-4 py-2 rounded-xl font-pixel text-[8px]"
+        <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+          Not medical advice. Keep effort manageable, stop with sharp pain, and scale down or skip sessions if you are injured, sick, or medically limited.
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          {FITNESS_SOURCE_LINKS.map((source) => (
+            <a
+              key={source.url}
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              className="px-2 py-1 rounded-full font-pixel text-[6px]"
               style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
             >
-              {t('common.cancel')}
-            </button>
-          </div>
+              {source.label}
+            </a>
+          ))}
         </div>
+      </div>
+
+      {(showBuilder || !activePlan) && (
+        <FitnessPlanBuilder
+          title={customTitle}
+          profile={profile}
+          onTitleChange={setCustomTitle}
+          onProfileChange={setProfile}
+          onCreate={createPlan}
+        />
       )}
 
       {activePlan && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="font-pixel text-[9px]" style={{ color: 'var(--accent)' }}>
-              {activePlan.title}
-            </h3>
-            <button
-              onClick={() => setShowNewPlan(true)}
-              className="font-pixel text-[7px] px-2 py-1 rounded-lg"
-              style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
-            >
-              + {t('plans.newPlan')}
-            </button>
+        <div className="space-y-4">
+          <div className="card p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-pixel text-[7px]" style={{ color: 'var(--text-muted)' }}>
+                  Active plan
+                </p>
+                <h3 className="font-pixel text-[9px] mt-1" style={{ color: 'var(--accent)' }}>
+                  {activePlan.title}
+                </h3>
+              </div>
+              <span
+                className="px-2 py-1 rounded-full font-pixel text-[6px]"
+                style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+              >
+                {completedCount}/{activePlan.days.length} done
+              </span>
+            </div>
+
+            {activePlan.profile && (
+              <div className="flex flex-wrap gap-2">
+                {[
+                  activePlan.profile.environment,
+                  activePlan.profile.goal,
+                  activePlan.profile.intensity,
+                  `${activePlan.profile.workoutsPerWeek} / week`,
+                  activePlan.profile.cardioPreference,
+                ].map((item) => (
+                  <span
+                    key={item}
+                    className="px-2 py-1 rounded-full font-pixel text-[6px]"
+                    style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-2">
+              <MiniSummary label="Strength" value={strengthCount} />
+              <MiniSummary label="Cardio" value={cardioCount} />
+              <MiniSummary label="Start" value={activePlan.startDate.slice(5)} />
+            </div>
+
+            {activePlan.sourceSummary && (
+              <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                {activePlan.sourceSummary}
+              </p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            {activePlan.days.map((day, i) => (
+          {nextDay && (
+            <div
+              className="card p-4 space-y-3"
+              style={{
+                background: 'linear-gradient(180deg, rgba(200,181,96,0.16) 0%, rgba(255,255,255,0) 100%)',
+              }}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-pixel text-[7px]" style={{ color: 'var(--text-muted)' }}>
+                    {nextDay.done ? 'Latest completed day' : 'Today / next up'}
+                  </p>
+                  <h3 className="font-pixel text-[9px] mt-1" style={{ color: 'var(--accent)' }}>
+                    {t('plans.day', { n: nextDay.day })} {nextDay.title ? `- ${nextDay.title}` : ''}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => toggleDay(activePlan.id, nextDayIndex)}
+                  className="px-3 py-2 rounded-xl font-pixel text-[7px] text-white transition-all active:scale-95"
+                  style={{ backgroundColor: nextDay.done ? '#6b7280' : 'var(--accent)' }}
+                >
+                  {nextDay.done ? 'Mark undone' : 'Mark done'}
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Badge>{getWorkoutTypeLabel(nextDay, t)}</Badge>
+                {nextDay.durationMin ? <Badge>{nextDay.durationMin} min</Badge> : null}
+                {nextDay.intensity ? <Badge>{nextDay.intensity}</Badge> : null}
+              </div>
+
+              <ul className="space-y-2">
+                {nextDay.exercises.map((exercise, index) => (
+                  <li key={`${nextDay.day}-${index}`} className="text-xs leading-relaxed" style={{ color: 'var(--text)' }}>
+                    {index + 1}. {exercise}
+                  </li>
+                ))}
+              </ul>
+
+              {nextDay.coachNote && (
+                <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+                  {nextDay.coachNote}
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {activePlan.days.map((day, index) => (
               <DayCard
-                key={i}
+                key={index}
                 day={day}
-                dayNumber={i + 1}
-                onToggle={() => toggleDay(activePlan.id, i)}
+                dayNumber={index + 1}
+                onToggle={() => toggleDay(activePlan.id, index)}
                 planId={activePlan.id}
-                dayIndex={i}
+                dayIndex={index}
               />
             ))}
           </div>
@@ -184,6 +259,205 @@ function FitnessTab() {
       )}
     </div>
   );
+}
+
+function FitnessPlanBuilder({
+  title,
+  profile,
+  onTitleChange,
+  onProfileChange,
+  onCreate,
+}: {
+  title: string;
+  profile: FitnessPlanProfile;
+  onTitleChange: (value: string) => void;
+  onProfileChange: (value: FitnessPlanProfile) => void;
+  onCreate: () => void;
+}) {
+  return (
+    <div className="card p-4 space-y-4">
+      <div>
+        <h3 className="font-pixel text-[8px]" style={{ color: 'var(--text)' }}>
+          Build your next 14 days
+        </h3>
+        <p className="text-xs mt-2 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+          Pick the environment and effort you can actually keep. Victoria will generate a realistic 2-week block, not a fantasy grind.
+        </p>
+      </div>
+
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => onTitleChange(e.target.value)}
+        placeholder="Optional custom title"
+        className="w-full px-3 py-2 rounded-xl text-sm outline-none"
+        style={{
+          backgroundColor: 'var(--shell)',
+          color: 'var(--text)',
+          border: '1px solid var(--border)',
+        }}
+      />
+
+      <PreferenceGroup
+        label="Where do you train?"
+        options={[
+          { value: 'home', label: 'Home' },
+          { value: 'gym', label: 'Gym' },
+          { value: 'outdoor', label: 'Outdoor' },
+        ]}
+        selected={profile.environment}
+        onChange={(value) => onProfileChange({ ...profile, environment: value as FitnessPlanProfile['environment'] })}
+      />
+
+      <PreferenceGroup
+        label="Main goal"
+        options={[
+          { value: 'consistency', label: 'Consistency' },
+          { value: 'strength', label: 'Strength' },
+          { value: 'fat-loss', label: 'Conditioning' },
+          { value: 'energy', label: 'Energy' },
+        ]}
+        selected={profile.goal}
+        onChange={(value) => onProfileChange({ ...profile, goal: value as FitnessPlanProfile['goal'] })}
+      />
+
+      <PreferenceGroup
+        label="Intensity"
+        options={[
+          { value: 'easy', label: 'Easy start' },
+          { value: 'steady', label: 'Steady' },
+          { value: 'push', label: 'Push' },
+        ]}
+        selected={profile.intensity}
+        onChange={(value) => onProfileChange({ ...profile, intensity: value as FitnessPlanProfile['intensity'] })}
+      />
+
+      <PreferenceGroup
+        label="Preferred cardio"
+        options={[
+          { value: 'walk', label: 'Walk' },
+          { value: 'run', label: 'Run' },
+          { value: 'cycle', label: 'Cycle' },
+          { value: 'swim', label: 'Swim' },
+          { value: 'mixed', label: 'Mixed' },
+        ]}
+        selected={profile.cardioPreference}
+        onChange={(value) => onProfileChange({ ...profile, cardioPreference: value as FitnessPlanProfile['cardioPreference'] })}
+      />
+
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="font-pixel text-[7px]" style={{ color: 'var(--text-muted)' }}>
+            Main sessions per week
+          </label>
+          <select
+            value={profile.workoutsPerWeek}
+            onChange={(e) => onProfileChange({ ...profile, workoutsPerWeek: Number(e.target.value) as 3 | 4 | 5 })}
+            className="w-full mt-2 px-3 py-2 rounded-xl text-sm outline-none"
+            style={{
+              backgroundColor: 'var(--shell)',
+              color: 'var(--text)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            <option value={3}>3</option>
+            <option value={4}>4</option>
+            <option value={5}>5</option>
+          </select>
+        </div>
+
+        <div className="flex items-end">
+          <button
+            onClick={() => onProfileChange({ ...profile, swimAllowed: !profile.swimAllowed })}
+            className="w-full px-3 py-2 rounded-xl font-pixel text-[7px] transition-all active:scale-95"
+            style={{
+              backgroundColor: profile.swimAllowed ? 'var(--accent)' : 'var(--shell)',
+              color: profile.swimAllowed ? 'white' : 'var(--text-muted)',
+              border: `1px solid ${profile.swimAllowed ? 'var(--accent)' : 'var(--border)'}`,
+            }}
+          >
+            {profile.swimAllowed ? 'Swimming OK' : 'Swimming not for me'}
+          </button>
+        </div>
+      </div>
+
+      <button
+        onClick={onCreate}
+        className="w-full py-3 rounded-xl font-pixel text-[8px] text-white transition-all active:scale-95"
+        style={{ backgroundColor: 'var(--accent)' }}
+      >
+        Generate 14-day plan
+      </button>
+    </div>
+  );
+}
+
+function PreferenceGroup({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: Array<{ value: string; label: string }>;
+  selected: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <label className="font-pixel text-[7px]" style={{ color: 'var(--text-muted)' }}>
+        {label}
+      </label>
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            onClick={() => onChange(option.value)}
+            className="px-3 py-2 rounded-xl font-pixel text-[7px] transition-all active:scale-95"
+            style={{
+              backgroundColor: selected === option.value ? 'var(--accent)' : 'var(--shell)',
+              color: selected === option.value ? 'white' : 'var(--text-muted)',
+              border: `1px solid ${selected === option.value ? 'var(--accent)' : 'var(--border)'}`,
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MiniSummary({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div
+      className="rounded-2xl px-3 py-2"
+      style={{ backgroundColor: 'var(--shell)', border: '1px solid var(--border)' }}
+    >
+      <p className="font-pixel text-[6px]" style={{ color: 'var(--text-muted)' }}>
+        {label}
+      </p>
+      <p className="font-pixel text-[8px] mt-1" style={{ color: 'var(--accent)' }}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function Badge({ children }: { children: React.ReactNode }) {
+  return (
+    <span
+      className="px-2 py-1 rounded-full font-pixel text-[6px]"
+      style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function getWorkoutTypeLabel(day: FitnessDay, t: ReturnType<typeof useTranslation>['t']) {
+  if (day.workoutType === 'gym') return 'Gym workout';
+  return t(`plans.${day.workoutType}`);
 }
 
 function DayCard({
@@ -207,17 +481,20 @@ function DayCard({
     rest: '#6b7280',
     home: '#3b82f6',
     outdoor: '#22c55e',
+    gym: '#8b5cf6',
   };
 
   const addExercise = async () => {
     if (!editingExercise.trim()) return;
     const plan = await db.fitnessPlans.get(planId);
     if (!plan) return;
-    const days = plan.days.map((d, i) =>
-      i === dayIndex
-        ? { ...d, exercises: [...(d.exercises || []), editingExercise.trim()] }
-        : d
+
+    const days = plan.days.map((entry, index) =>
+      index === dayIndex
+        ? { ...entry, exercises: [...(entry.exercises || []), editingExercise.trim()] }
+        : entry
     );
+
     await db.fitnessPlans.update(planId, { days });
     setEditingExercise('');
     setShowInput(false);
@@ -225,45 +502,60 @@ function DayCard({
 
   return (
     <div
-      className={cn(
-        'card p-3 transition-all',
-        day.done ? 'opacity-60' : ''
-      )}
+      className={cn('card p-3 transition-all space-y-3', day.done ? 'opacity-60' : '')}
     >
-      <div className="flex items-center justify-between mb-2">
-        <span className="font-pixel text-[7px]" style={{ color: 'var(--text-muted)' }}>
-          {t('plans.day', { n: dayNumber })}
-        </span>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <span className="font-pixel text-[7px]" style={{ color: 'var(--text-muted)' }}>
+            {t('plans.day', { n: dayNumber })}
+          </span>
+          <p className="font-pixel text-[8px] mt-1" style={{ color: 'var(--text)' }}>
+            {day.title || getWorkoutTypeLabel(day, t)}
+          </p>
+        </div>
         <button
           onClick={onToggle}
-          className="w-5 h-5 rounded border-2 flex items-center justify-center transition-all"
+          className="w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all"
           style={{
             borderColor: day.done ? '#22c55e' : 'var(--border)',
             backgroundColor: day.done ? '#22c55e' : 'transparent',
           }}
         >
-          {day.done && <span className="text-white text-[8px]">✓</span>}
+          {day.done ? <span className="text-white text-[8px]">✓</span> : null}
         </button>
       </div>
 
-      <div className="flex items-center gap-1 mb-2">
-        <span
-          className="w-2 h-2 rounded-full"
-          style={{ backgroundColor: workoutColors[day.workoutType] }}
-        />
-        <span className="font-pixel text-[6px]" style={{ color: 'var(--text-muted)' }}>
-          {t(`plans.${day.workoutType}`)}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex items-center gap-1">
+          <span
+            className="w-2 h-2 rounded-full"
+            style={{ backgroundColor: workoutColors[day.workoutType] }}
+          />
+          <span className="font-pixel text-[6px]" style={{ color: 'var(--text-muted)' }}>
+            {getWorkoutTypeLabel(day, t)}
+          </span>
         </span>
+        {day.durationMin ? (
+          <span className="font-pixel text-[6px]" style={{ color: 'var(--text-muted)' }}>
+            {day.durationMin} min
+          </span>
+        ) : null}
       </div>
 
-      {day.exercises && day.exercises.length > 0 && (
-        <ul className="space-y-1 mb-2">
-          {day.exercises.map((ex, j) => (
-            <li key={j} className="text-[10px] truncate" style={{ color: 'var(--text)' }}>
-              • {ex}
+      {day.exercises.length > 0 && (
+        <ul className="space-y-1.5">
+          {day.exercises.slice(0, 5).map((exercise, index) => (
+            <li key={index} className="text-[11px] leading-relaxed" style={{ color: 'var(--text)' }}>
+              • {exercise}
             </li>
           ))}
         </ul>
+      )}
+
+      {day.coachNote && (
+        <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+          {day.coachNote}
+        </p>
       )}
 
       {showInput ? (
@@ -273,13 +565,21 @@ function DayCard({
             value={editingExercise}
             onChange={(e) => setEditingExercise(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addExercise()}
-            placeholder="Exercise..."
+            placeholder="Custom exercise..."
             className="flex-1 px-2 py-1 rounded text-[10px] outline-none"
-            style={{ backgroundColor: 'var(--shell)', color: 'var(--text)', border: '1px solid var(--border)' }}
+            style={{
+              backgroundColor: 'var(--shell)',
+              color: 'var(--text)',
+              border: '1px solid var(--border)',
+            }}
             autoFocus
           />
-          <button onClick={addExercise} className="text-[10px] px-1" style={{ color: 'var(--accent)' }}>✓</button>
-          <button onClick={() => setShowInput(false)} className="text-[10px] px-1" style={{ color: 'var(--text-muted)' }}>✕</button>
+          <button onClick={addExercise} className="text-[10px] px-1" style={{ color: 'var(--accent)' }}>
+            ✓
+          </button>
+          <button onClick={() => setShowInput(false)} className="text-[10px] px-1" style={{ color: 'var(--text-muted)' }}>
+            x
+          </button>
         </div>
       ) : (
         <button
@@ -293,8 +593,6 @@ function DayCard({
     </div>
   );
 }
-
-// ─── Todos Tab ────────────────────────────────────────────────────────────────
 
 function TodosTab() {
   const { t } = useTranslation();
@@ -321,12 +619,11 @@ function TodosTab() {
     await db.todos.delete(id);
   };
 
-  const pending = todos?.filter((t) => !t.done) ?? [];
-  const done = todos?.filter((t) => t.done) ?? [];
+  const pending = todos?.filter((todo) => !todo.done) ?? [];
+  const done = todos?.filter((todo) => todo.done) ?? [];
 
   return (
     <div className="space-y-4">
-      {/* Add input */}
       <div className="flex gap-2">
         <input
           type="text"
@@ -350,7 +647,6 @@ function TodosTab() {
         </button>
       </div>
 
-      {/* Pending todos */}
       {pending.length === 0 && done.length === 0 && (
         <p className="text-center text-sm py-8" style={{ color: 'var(--text-muted)' }}>
           {t('plans.noTodos')}
@@ -404,7 +700,7 @@ function TodoRow({
           backgroundColor: todo.done ? '#22c55e' : 'transparent',
         }}
       >
-        {todo.done && <span className="text-white text-[8px]">✓</span>}
+        {todo.done ? <span className="text-white text-[8px]">✓</span> : null}
       </button>
       <span
         className={cn('flex-1 text-sm', todo.done ? 'line-through opacity-50' : '')}
@@ -412,23 +708,21 @@ function TodoRow({
       >
         {todo.text}
       </span>
-      {todo.dueDate && (
+      {todo.dueDate ? (
         <span className="font-pixel text-[6px]" style={{ color: 'var(--text-muted)' }}>
           {todo.dueDate}
         </span>
-      )}
+      ) : null}
       <button
         onClick={() => onDelete(todo.id)}
         className="text-xs opacity-30 hover:opacity-100 transition-opacity"
         style={{ color: '#ef4444' }}
       >
-        ✕
+        x
       </button>
     </div>
   );
 }
-
-// ─── Goals Tab ────────────────────────────────────────────────────────────────
 
 function GoalsTab() {
   const { t } = useTranslation();
@@ -453,23 +747,22 @@ function GoalsTab() {
 
   return (
     <div className="space-y-4">
-      {/* Add goal */}
       <div className="card p-4 space-y-3">
         <h3 className="font-pixel text-[8px]" style={{ color: 'var(--text-muted)' }}>
           {t('plans.addGoal')}
         </h3>
         <div className="flex gap-2 flex-wrap">
-          {horizons.map((h) => (
+          {horizons.map((entry) => (
             <button
-              key={h}
-              onClick={() => setHorizon(h)}
+              key={entry}
+              onClick={() => setHorizon(entry)}
               className="px-2 py-1 rounded-lg font-pixel text-[6px] transition-all"
               style={{
-                backgroundColor: horizon === h ? 'var(--accent)' : 'var(--shell)',
-                color: horizon === h ? 'white' : 'var(--text-muted)',
+                backgroundColor: horizon === entry ? 'var(--accent)' : 'var(--shell)',
+                color: horizon === entry ? 'white' : 'var(--text-muted)',
               }}
             >
-              {t(`plans.horizons.${h}`)}
+              {t(`plans.horizons.${entry}`)}
             </button>
           ))}
         </div>
@@ -497,23 +790,23 @@ function GoalsTab() {
         </div>
       </div>
 
-      {/* Goals list */}
-      {goals?.length === 0 && (
+      {goals?.length === 0 ? (
         <p className="text-center text-sm py-4" style={{ color: 'var(--text-muted)' }}>
           No goals yet. What do you want to achieve?
         </p>
-      )}
+      ) : null}
 
-      {horizons.map((h) => {
-        const hGoals = goals?.filter((g) => g.horizon === h) ?? [];
-        if (hGoals.length === 0) return null;
+      {horizons.map((entry) => {
+        const groupedGoals = goals?.filter((goal) => goal.horizon === entry) ?? [];
+        if (groupedGoals.length === 0) return null;
+
         return (
-          <div key={h}>
+          <div key={entry}>
             <p className="font-pixel text-[7px] mb-2" style={{ color: 'var(--text-muted)' }}>
-              {t(`plans.horizons.${h}`)}
+              {t(`plans.horizons.${entry}`)}
             </p>
             <div className="space-y-2">
-              {hGoals.map((goal) => (
+              {groupedGoals.map((goal) => (
                 <div
                   key={goal.id}
                   className="flex items-start gap-3 px-3 py-3 rounded-xl"
@@ -527,7 +820,7 @@ function GoalsTab() {
                       backgroundColor: goal.done ? '#22c55e' : 'transparent',
                     }}
                   >
-                    {goal.done && <span className="text-white text-[8px]">✓</span>}
+                    {goal.done ? <span className="text-white text-[8px]">✓</span> : null}
                   </button>
                   <div className="flex-1">
                     <p
@@ -536,18 +829,18 @@ function GoalsTab() {
                     >
                       {goal.text}
                     </p>
-                    {goal.targetDate && (
+                    {goal.targetDate ? (
                       <p className="font-pixel text-[6px] mt-1" style={{ color: 'var(--text-muted)' }}>
                         Target: {goal.targetDate}
                       </p>
-                    )}
+                    ) : null}
                   </div>
                   <button
                     onClick={() => db.goals.delete(goal.id)}
                     className="text-xs opacity-30 hover:opacity-100 transition-opacity"
                     style={{ color: '#ef4444' }}
                   >
-                    ✕
+                    x
                   </button>
                 </div>
               ))}
