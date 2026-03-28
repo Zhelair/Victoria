@@ -7,7 +7,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { AppShell } from '@/components/layout/AppShell';
 import { db } from '@/lib/db';
 import { createFitnessPlan, DEFAULT_FITNESS_PROFILE, FITNESS_SOURCE_LINKS } from '@/lib/fitness-plan';
-import { cn } from '@/lib/utils';
+import { cn, getTodayDateKey } from '@/lib/utils';
 import type { FitnessDay, FitnessPlanProfile, Goal, TodoItem } from '@/types';
 
 export default function PlansPage() {
@@ -86,7 +86,13 @@ function FitnessTab() {
     if (!plan) return;
 
     const days = plan.days.map((day, index) =>
-      index === dayIndex ? { ...day, done: !day.done } : day
+      index === dayIndex
+        ? {
+            ...day,
+            done: !day.done,
+            completedDate: !day.done ? getTodayDateKey() : undefined,
+          }
+        : day
     );
 
     await db.fitnessPlans.update(planId, { days });

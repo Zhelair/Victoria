@@ -11,7 +11,7 @@ import { getTodayDateKey, pickRandom } from '@/lib/utils';
 import { getActivePlanDayNumber, getMorningSpark } from '@/lib/morning';
 import { applyScoringRule, getPinnedHomeRules, getRuleScoreDelta } from '@/lib/scoring';
 import { DEFAULT_SETTINGS, getMoodTier } from '@/types';
-import { db } from '@/lib/db';
+import { db, markDailyCheckin } from '@/lib/db';
 
 export default function HomePage() {
   const router = useRouter();
@@ -26,6 +26,7 @@ export default function HomePage() {
 
   const [tamaMode, setTamaMode] = useState(false);
   const [manualMorningOpen, setManualMorningOpen] = useState(false);
+  const [autoRuleSummary, setAutoRuleSummary] = useState<Array<{ label: string; delta: number; date: string }>>([]);
   const pendingTodos = useLiveQuery(
     () => db.todos.orderBy('createdAt').filter((todo) => !todo.done).toArray(),
     []
@@ -84,6 +85,16 @@ export default function HomePage() {
       router.replace('/onboarding');
     }
   }, [hasHydrated, settings.onboardingDone, router]);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+    try {
+      const raw = sessionStorage.getItem(`victoria-auto-rule-summary-${getTodayDateKey()}`);
+      setAutoRuleSummary(raw ? JSON.parse(raw) : []);
+    } catch {
+      setAutoRuleSummary([]);
+    }
+  }, [hasHydrated]);
 
   const moodTier = getMoodTier(moodScore);
   const greetingKey = `victoria.${moodTier}_greeting` as const;
@@ -176,6 +187,42 @@ export default function HomePage() {
             <p className="text-xs leading-relaxed" style={{ color: 'var(--text)' }}>
               {victoriaLine}
             </p>
+          </div>
+        )}
+
+        {autoRuleSummary.length > 0 && (
+          <div className="card p-3 space-y-2" style={{ borderColor: '#ef4444', borderWidth: 1 }}>
+            <div className="flex items-center justify-between gap-3">
+              <p className="font-pixel text-[8px]" style={{ color: '#ef4444' }}>
+                Overnight score update
+              </p>
+              <button
+                onClick={() => {
+                  try {
+                    sessionStorage.removeItem(`victoria-auto-rule-summary-${getTodayDateKey()}`);
+                  } catch {
+                    // non-critical
+                  }
+                  setAutoRuleSummary([]);
+                }}
+                className="font-pixel text-[7px] px-2 py-1 rounded-lg"
+                style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+              >
+                x
+              </button>
+            </div>
+            <div className="space-y-1">
+              {autoRuleSummary.map((item, index) => (
+                <div key={`${item.label}-${index}`} className="flex items-center justify-between gap-3">
+                  <span className="text-xs" style={{ color: 'var(--text)' }}>
+                    {item.label}
+                  </span>
+                  <span className="font-pixel text-[7px]" style={{ color: item.delta > 0 ? '#22c55e' : '#ef4444' }}>
+                    {item.delta > 0 ? `+${item.delta}` : `${item.delta}`}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -409,6 +456,11 @@ function MorningBriefingCard({
     (Number.isFinite(wakeHour) ? wakeHour : 9) * 60 + (Number.isFinite(wakeMinute) ? wakeMinute : 0);
   const isMorningWindow = currentMinutes >= wakeMinutes && currentMinutes <= wakeMinutes + 6 * 60;
   const isVisible = settings.morningBriefingEnabled && (forceOpen || isMorningWindow) && (!dismissed || forceOpen);
+
+  useEffect(() => {
+    if (!isVisible) return;
+    void markDailyCheckin(todayStamp, true);
+  }, [isVisible, todayStamp]);
 
   const topTodos = useMemo(
     () => (Array.isArray(pendingTodos) ? pendingTodos.slice(0, 3) : []),

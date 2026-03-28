@@ -143,6 +143,7 @@ export interface FitnessDay {
   title?: string;
   exercises: string[];
   done: boolean;
+  completedDate?: string;
   durationMin?: number;
   intensity?: 'easy' | 'steady' | 'push';
   coachNote?: string;
@@ -235,6 +236,7 @@ export interface AppSettings {
   soundsEnabled: boolean;
   soundVolume: number;
   chatScoreConfirmationsEnabled: boolean;
+  lastDailyRuleEvaluationDate?: string;
   morningBriefingEnabled: boolean;
   morningLocation: string;
   morningWeatherEnabled: boolean;
