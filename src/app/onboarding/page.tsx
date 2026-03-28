@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { useVictoriaStore } from '@/store';
@@ -12,6 +12,7 @@ type Step = 'welcome' | 'name' | 'goal' | 'wakeTime' | 'done';
 export default function OnboardingPage() {
   const { t } = useTranslation();
   const router = useRouter();
+  const hasHydrated = useVictoriaStore((s) => s._hasHydrated);
   const updateSettings = useVictoriaStore((s) => s.updateSettings);
   const settings = useVictoriaStore((s) => s.settings);
 
@@ -19,6 +20,13 @@ export default function OnboardingPage() {
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
   const [wakeTime, setWakeTime] = useState('09:00');
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+    if (settings.onboardingDone) {
+      router.replace('/');
+    }
+  }, [hasHydrated, settings.onboardingDone, router]);
 
   const handleComplete = () => {
     updateSettings({
@@ -28,6 +36,10 @@ export default function OnboardingPage() {
     });
     router.replace('/');
   };
+
+  if (!hasHydrated) {
+    return null;
+  }
 
   return (
     <div

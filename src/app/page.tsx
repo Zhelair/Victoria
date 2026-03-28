@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { v4 as uuidv4 } from 'uuid';
 import { useVictoriaStore } from '@/store';
 import { TamagotchiScreen } from '@/components/home/TamagotchiScreen';
 import { AppShell } from '@/components/layout/AppShell';
-import { getGreeting, pickRandom } from '@/lib/utils';
+import { pickRandom } from '@/lib/utils';
+import { getActivePlanDayNumber, getMorningSpark } from '@/lib/morning';
 import { getMoodTier } from '@/types';
 import { db } from '@/lib/db';
-import { v4 as uuidv4 } from 'uuid';
 
 const FEED_ACTIONS = [
   { key: 'healthy_meal', labelKey: 'feed.healthyMeal', emoji: '🥗', delta: 8 },
@@ -33,23 +35,30 @@ const ACT_ACTIONS = [
 export default function HomePage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const hasHydrated = useVictoriaStore((s) => s._hasHydrated);
   const settings = useVictoriaStore((s) => s.settings);
   const moodScore = useVictoriaStore((s) => s.moodScore);
   const adjustMoodScore = useVictoriaStore((s) => s.adjustMoodScore);
-  const todos = useVictoriaStore((s) => s.logCategories); // placeholder
   const streakDays = useVictoriaStore((s) => s.streakDays);
+  const setActiveSphere = useVictoriaStore((s) => s.setActiveSphere);
 
-  // Wait one tick after mount so Zustand persist can finish reading localStorage
-  const [ready, setReady] = useState(false);
   const [tamaMode, setTamaMode] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setReady(true), 0);
-    return () => clearTimeout(t);
-  }, []);
+  const pendingTodos = useLiveQuery(
+    () => db.todos.orderBy('createdAt').filter((todo) => !todo.done).toArray(),
+    []
+  );
+  const activeGoals = useLiveQuery(
+    () => db.goals.filter((goal) => !goal.done).toArray(),
+    []
+  );
+  const activePlan = useLiveQuery(
+    () => db.fitnessPlans.filter((plan) => plan.active).first(),
+    []
+  );
 
-  // Morning alarm — fires when clock matches wakeUpTime
   useEffect(() => {
     if (!settings.notificationsEnabled || !settings.wakeUpTime) return;
+
     const alreadyFiredKey = `alarm-fired-${new Date().toISOString().split('T')[0]}`;
     const tick = setInterval(() => {
       const now = new Date();
@@ -64,19 +73,18 @@ export default function HomePage() {
           });
         }
       }
-    }, 30_000); // check every 30s
+    }, 30_000);
+
     return () => clearInterval(tick);
   }, [settings.notificationsEnabled, settings.wakeUpTime, settings.userName]);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!hasHydrated) return;
     if (!settings.onboardingDone) {
       router.replace('/onboarding');
     }
-  }, [ready, settings.onboardingDone, router]);
+  }, [hasHydrated, settings.onboardingDone, router]);
 
-  const hour = new Date().getHours();
-  const greeting = getGreeting(hour);
   const moodTier = getMoodTier(moodScore);
   const greetingKey = `victoria.${moodTier}_greeting` as const;
   const greetings = t(greetingKey, { returnObjects: true }) as string[];
@@ -86,7 +94,6 @@ export default function HomePage() {
 
   const handleAction = async (key: string, delta: number, label: string) => {
     adjustMoodScore(delta);
-    // Log the entry
     try {
       const today = new Date().toISOString().split('T')[0];
       await db.logEntries.add({
@@ -101,7 +108,7 @@ export default function HomePage() {
     }
   };
 
-  if (!ready) {
+  if (!hasHydrated) {
     return (
       <AppShell>
         <div style={{ minHeight: '60vh' }} />
@@ -114,7 +121,18 @@ export default function HomePage() {
   return (
     <AppShell>
       <div className="flex flex-col gap-4 p-4">
-        {/* Greeting */}
+        <MorningBriefingCard
+          settings={settings}
+          pendingTodos={pendingTodos ?? []}
+          activeGoals={activeGoals ?? []}
+          activePlan={activePlan ?? null}
+          streakDays={streakDays}
+          onContinue={() => {
+            setActiveSphere('daily');
+            router.push('/chat?starter=morning');
+          }}
+        />
+
         {victoriaLine && (
           <div
             className="card p-3 text-center"
@@ -126,20 +144,22 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Tamagotchi Screen */}
         <div className="relative">
           <TamagotchiScreen />
           <button
             onClick={() => setTamaMode(true)}
             className="absolute top-0 right-0 p-1.5 rounded-xl font-pixel text-[6px] transition-all active:scale-95"
-            style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+            style={{
+              backgroundColor: 'var(--shell)',
+              color: 'var(--text-muted)',
+              border: '1px solid var(--border)',
+            }}
             title="Tamagotchi mode"
           >
             🎮
           </button>
         </div>
 
-        {/* Tamagotchi fullscreen overlay */}
         {tamaMode && (
           <div
             className="fixed inset-0 z-50 flex flex-col items-center justify-center"
@@ -148,7 +168,11 @@ export default function HomePage() {
             <button
               onClick={() => setTamaMode(false)}
               className="absolute top-4 right-4 p-2 rounded-xl font-pixel text-[9px]"
-              style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+              style={{
+                backgroundColor: 'var(--shell)',
+                color: 'var(--text-muted)',
+                border: '1px solid var(--border)',
+              }}
             >
               ✕
             </button>
@@ -158,7 +182,6 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Streak badge */}
         {streakDays > 0 && (
           <div className="flex justify-center">
             <span
@@ -170,7 +193,6 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* FEED */}
         <ActionSection
           title={t('home.feed')}
           actions={FEED_ACTIONS}
@@ -179,7 +201,6 @@ export default function HomePage() {
           t={t}
         />
 
-        {/* ACT */}
         <ActionSection
           title={t('home.act')}
           actions={ACT_ACTIONS}
@@ -188,7 +209,6 @@ export default function HomePage() {
           t={t}
         />
 
-        {/* Today's todos quick view */}
         <TodayTasksWidget />
       </div>
     </AppShell>
@@ -210,17 +230,14 @@ function ActionSection({
 }) {
   return (
     <div className="card p-3">
-      <h3
-        className="font-pixel text-[8px] mb-3"
-        style={{ color }}
-      >
+      <h3 className="font-pixel text-[8px] mb-3" style={{ color }}>
         {title}
       </h3>
       <div className="flex flex-wrap gap-2">
-        {actions.map((a) => (
+        {actions.map((action) => (
           <button
-            key={a.key}
-            onClick={() => onAction(a.key, a.delta, t(a.labelKey))}
+            key={action.key}
+            onClick={() => onAction(action.key, action.delta, t(action.labelKey))}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all active:scale-95"
             style={{
               backgroundColor: 'var(--shell)',
@@ -228,13 +245,13 @@ function ActionSection({
               border: '1px solid var(--border)',
             }}
           >
-            <span>{a.emoji}</span>
-            <span className="font-pixel text-[7px]">{t(a.labelKey)}</span>
+            <span>{action.emoji}</span>
+            <span className="font-pixel text-[7px]">{t(action.labelKey)}</span>
             <span
               className="font-pixel text-[6px] ml-0.5"
-              style={{ color: a.delta > 0 ? '#22c55e' : '#ef4444' }}
+              style={{ color: action.delta > 0 ? '#22c55e' : '#ef4444' }}
             >
-              +{a.delta}
+              +{action.delta}
             </span>
           </button>
         ))}
@@ -245,16 +262,162 @@ function ActionSection({
 
 function TodayTasksWidget() {
   const { t } = useTranslation();
-  const todos = useVictoriaStore((s) => s.logCategories);
+  const todos = useLiveQuery(
+    () => db.todos.orderBy('createdAt').filter((todo) => !todo.done).toArray(),
+    []
+  );
+  const preview = (todos ?? []).slice(0, 3);
+  const remaining = Math.max(0, (todos?.length ?? 0) - preview.length);
 
   return (
     <div className="card p-3 mb-4">
       <h3 className="font-pixel text-[8px] mb-2" style={{ color: 'var(--text-muted)' }}>
         {t('home.todayTasks')}
       </h3>
-      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-        {t('home.noTasks')}
-      </p>
+      {preview.length === 0 ? (
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          {t('home.noTasks')}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {preview.map((todo) => (
+            <div
+              key={todo.id}
+              className="rounded-xl px-3 py-2"
+              style={{ backgroundColor: 'var(--shell)' }}
+            >
+              <span className="text-xs" style={{ color: 'var(--text)' }}>
+                {todo.text}
+              </span>
+            </div>
+          ))}
+          {remaining > 0 && (
+            <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>
+              +{remaining} more task{remaining === 1 ? '' : 's'}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MorningBriefingCard({
+  settings,
+  pendingTodos,
+  activeGoals,
+  activePlan,
+  streakDays,
+  onContinue,
+}: {
+  settings: ReturnType<typeof useVictoriaStore.getState>['settings'];
+  pendingTodos: Array<{ id: string; text: string }>;
+  activeGoals: Array<{ id: string; text: string }>;
+  activePlan: { title: string; startDate: string; days: Array<{ done: boolean }> } | null;
+  streakDays: number;
+  onContinue: () => void;
+}) {
+  const [dismissed, setDismissed] = useState(false);
+  const userName = settings.userName || 'friend';
+  const todayKey = useMemo(
+    () => `victoria-morning-briefing-dismissed-${new Date().toISOString().split('T')[0]}`,
+    []
+  );
+
+  useEffect(() => {
+    setDismissed(sessionStorage.getItem(todayKey) === '1');
+  }, [todayKey]);
+
+  const now = new Date();
+  const [wakeHour, wakeMinute] = settings.wakeUpTime.split(':').map(Number);
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const wakeMinutes =
+    (Number.isFinite(wakeHour) ? wakeHour : 9) * 60 + (Number.isFinite(wakeMinute) ? wakeMinute : 0);
+  const isMorningWindow = currentMinutes >= wakeMinutes && currentMinutes <= wakeMinutes + 6 * 60;
+
+  if (!settings.morningBriefingEnabled || !isMorningWindow || dismissed) {
+    return null;
+  }
+
+  const topTodos = pendingTodos.slice(0, 3);
+  const topGoals = activeGoals.slice(0, 2);
+  const spark = getMorningSpark(settings.morningFactCategories);
+  const activePlanDay = activePlan
+    ? getActivePlanDayNumber(
+        activePlan.startDate,
+        activePlan.days.filter((day) => day.done).length
+      )
+    : null;
+
+  return (
+    <div className="card p-4 space-y-3" style={{ borderColor: 'var(--accent)' }}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-pixel text-[8px]" style={{ color: 'var(--accent)' }}>
+            Morning Briefing
+          </p>
+          <p className="text-sm mt-2" style={{ color: 'var(--text)' }}>
+            Good morning, {userName}. Here&apos;s your first look at today.
+          </p>
+        </div>
+        <button
+          onClick={() => {
+            sessionStorage.setItem(todayKey, '1');
+            setDismissed(true);
+          }}
+          className="font-pixel text-[8px] px-2 py-1 rounded-lg"
+          style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
+          aria-label="Dismiss morning briefing"
+        >
+          x
+        </button>
+      </div>
+
+      <div className="space-y-2 text-xs" style={{ color: 'var(--text)' }}>
+        <p>
+          {topTodos.length > 0
+            ? `Top tasks: ${topTodos.map((todo) => todo.text).join(' • ')}`
+            : 'Top tasks: nothing queued yet, so give yourself one clear win.'}
+        </p>
+        <p>
+          {topGoals.length > 0
+            ? `Goals in focus: ${topGoals.map((goal) => goal.text).join(' • ')}`
+            : 'Goals in focus: no active goals saved yet.'}
+        </p>
+        <p>
+          {activePlanDay
+            ? `Fitness plan: ${activePlan?.title} — Day ${activePlanDay}.`
+            : 'Fitness plan: no active plan today.'}
+        </p>
+        <p>
+          {streakDays > 0
+            ? `Streak check: ${streakDays} day${streakDays === 1 ? '' : 's'} running.`
+            : 'Streak check: today can be your reset point.'}
+        </p>
+      </div>
+
+      <div
+        className="rounded-xl px-3 py-3"
+        style={{ backgroundColor: 'var(--shell)', border: '1px solid var(--border)' }}
+      >
+        <p className="font-pixel text-[7px]" style={{ color: 'var(--accent)' }}>
+          {spark.label}
+        </p>
+        <p className="text-xs mt-2" style={{ color: 'var(--text)' }}>
+          {spark.text}
+        </p>
+        <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
+          Focus profile: {settings.morningLocation || 'No location set'} · topics {settings.morningNewsTopics || 'none yet'} · facts {settings.morningFactCategories || 'general'}
+        </p>
+      </div>
+
+      <button
+        onClick={onContinue}
+        className="w-full py-3 rounded-xl font-pixel text-[8px] text-white transition-all active:scale-95"
+        style={{ backgroundColor: 'var(--accent)' }}
+      >
+        Continue in Chat
+      </button>
     </div>
   );
 }

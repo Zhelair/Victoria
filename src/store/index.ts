@@ -166,7 +166,7 @@ export const useVictoriaStore = create<VictoriaState>()(
         const today = new Date().toISOString().split('T')[0];
         const prev = get().miniGameUsage;
         const u = prev.date === today
-          ? { giftGiven: false, complimentCount: 0, ...prev }
+          ? prev
           : { date: today, feed: 0, play: 0, cleaned: false, slept: false, giftGiven: false, complimentCount: 0 };
         if (type === 'gift' && u.giftGiven) return { allowed: false };
         if (type === 'compliment' && u.complimentCount >= 3) return { allowed: false };
@@ -180,6 +180,18 @@ export const useVictoriaStore = create<VictoriaState>()(
     {
       name: 'victoria-store',
       storage: createJSONStorage(() => localStorage),
+      merge: (persistedState, currentState) => {
+        const persisted = persistedState as Partial<VictoriaState> | undefined;
+        return {
+          ...currentState,
+          ...persisted,
+          settings: {
+            ...DEFAULT_SETTINGS,
+            ...currentState.settings,
+            ...(persisted?.settings ?? {}),
+          },
+        };
+      },
       onRehydrateStorage: () => () => {
         useVictoriaStore.setState({ _hasHydrated: true });
       },
