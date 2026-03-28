@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useVictoriaStore } from '@/store';
 import { AppShell } from '@/components/layout/AppShell';
 import { db } from '@/lib/db';
+import { buildCompanionContext } from '@/lib/companion-context';
 import { extractFileContent, formatFileSize, SUPPORTED_FILE_TYPES, MAX_FILE_SIZE, truncate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { getMoodTier } from '@/types';
@@ -19,6 +20,8 @@ export default function ChatPage() {
   const activeSphere = useVictoriaStore((s) => s.activeSphere);
   const setActiveSphere = useVictoriaStore((s) => s.setActiveSphere);
   const tier = useVictoriaStore((s) => s.tier);
+  const streakDays = useVictoriaStore((s) => s.streakDays);
+  const totalDays = useVictoriaStore((s) => s.totalDays);
 
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
@@ -204,6 +207,16 @@ export default function ChatPage() {
     try {
       abortRef.current = new AbortController();
       const moodTier = getMoodTier(moodScore);
+      const [companionContext, currentThread] = await Promise.all([
+        buildCompanionContext({
+          settings,
+          activeSphere,
+          moodScore,
+          streakDays,
+          totalDays,
+        }),
+        currentThreadId ? db.chatThreads.get(currentThreadId) : Promise.resolve(undefined),
+      ]);
 
       const apiMessages = updatedMessages
         .slice(-20) // last 20 for context
@@ -218,6 +231,8 @@ export default function ChatPage() {
           moodTier,
           sphere: activeSphere,
           userName: settings.userName,
+          companionContext,
+          pinnedContext: currentThread?.pinnedContext,
           apiKey: settings.tier !== 'free' ? undefined : undefined,
         }),
         signal: abortRef.current.signal,

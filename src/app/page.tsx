@@ -10,7 +10,7 @@ import { TamagotchiScreen } from '@/components/home/TamagotchiScreen';
 import { AppShell } from '@/components/layout/AppShell';
 import { pickRandom } from '@/lib/utils';
 import { getActivePlanDayNumber, getMorningSpark } from '@/lib/morning';
-import { getMoodTier } from '@/types';
+import { DEFAULT_SETTINGS, getMoodTier } from '@/types';
 import { db } from '@/lib/db';
 
 const FEED_ACTIONS = [
@@ -41,6 +41,7 @@ export default function HomePage() {
   const adjustMoodScore = useVictoriaStore((s) => s.adjustMoodScore);
   const streakDays = useVictoriaStore((s) => s.streakDays);
   const setActiveSphere = useVictoriaStore((s) => s.setActiveSphere);
+  const [hydrationTimedOut, setHydrationTimedOut] = useState(false);
 
   const [tamaMode, setTamaMode] = useState(false);
   const pendingTodos = useLiveQuery(
@@ -55,6 +56,19 @@ export default function HomePage() {
     () => db.fitnessPlans.filter((plan) => plan.active).first(),
     []
   );
+
+  useEffect(() => {
+    if (hasHydrated) {
+      setHydrationTimedOut(false);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setHydrationTimedOut(true);
+    }, 1500);
+
+    return () => window.clearTimeout(timeout);
+  }, [hasHydrated]);
 
   useEffect(() => {
     if (!settings.notificationsEnabled || !settings.wakeUpTime) return;
@@ -111,12 +125,28 @@ export default function HomePage() {
   if (!hasHydrated) {
     return (
       <AppShell>
-        <div style={{ minHeight: '60vh' }} />
+        <StatusCard
+          title="Loading Victoria"
+          message={
+            hydrationTimedOut
+              ? 'Your saved session is taking longer than usual to load.'
+              : 'Restoring your local companion data...'
+          }
+        />
       </AppShell>
     );
   }
 
-  if (!settings.onboardingDone) return null;
+  if (!settings.onboardingDone) {
+    return (
+      <AppShell>
+        <StatusCard
+          title="Redirecting"
+          message="Taking you to onboarding..."
+        />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
@@ -328,8 +358,12 @@ function MorningBriefingCard({
     setDismissed(sessionStorage.getItem(todayKey) === '1');
   }, [todayKey]);
 
+  const wakeTime =
+    typeof settings.wakeUpTime === 'string' && settings.wakeUpTime.includes(':')
+      ? settings.wakeUpTime
+      : DEFAULT_SETTINGS.wakeUpTime;
   const now = new Date();
-  const [wakeHour, wakeMinute] = settings.wakeUpTime.split(':').map(Number);
+  const [wakeHour, wakeMinute] = wakeTime.split(':').map(Number);
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const wakeMinutes =
     (Number.isFinite(wakeHour) ? wakeHour : 9) * 60 + (Number.isFinite(wakeMinute) ? wakeMinute : 0);
@@ -339,13 +373,30 @@ function MorningBriefingCard({
     return null;
   }
 
-  const topTodos = pendingTodos.slice(0, 3);
-  const topGoals = activeGoals.slice(0, 2);
-  const spark = getMorningSpark(settings.morningFactCategories);
+  const topTodos = Array.isArray(pendingTodos) ? pendingTodos.slice(0, 3) : [];
+  const topGoals = Array.isArray(activeGoals) ? activeGoals.slice(0, 2) : [];
+  const factCategories =
+    typeof settings.morningFactCategories === 'string'
+      ? settings.morningFactCategories
+      : DEFAULT_SETTINGS.morningFactCategories;
+  const spark = getMorningSpark(factCategories);
+  const planDays = Array.isArray(activePlan?.days) ? activePlan.days : [];
+  const planTitle =
+    typeof activePlan?.title === 'string' && activePlan.title.trim()
+      ? activePlan.title
+      : 'Active plan';
+  const location =
+    typeof settings.morningLocation === 'string' && settings.morningLocation.trim()
+      ? settings.morningLocation
+      : 'No location set';
+  const newsTopics =
+    typeof settings.morningNewsTopics === 'string' && settings.morningNewsTopics.trim()
+      ? settings.morningNewsTopics
+      : 'none yet';
   const activePlanDay = activePlan
     ? getActivePlanDayNumber(
         activePlan.startDate,
-        activePlan.days.filter((day) => day.done).length
+        planDays.filter((day) => day.done).length
       )
     : null;
 
@@ -386,7 +437,7 @@ function MorningBriefingCard({
         </p>
         <p>
           {activePlanDay
-            ? `Fitness plan: ${activePlan?.title} — Day ${activePlanDay}.`
+            ? `Fitness plan: ${planTitle} — Day ${activePlanDay}.`
             : 'Fitness plan: no active plan today.'}
         </p>
         <p>
@@ -407,7 +458,7 @@ function MorningBriefingCard({
           {spark.text}
         </p>
         <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
-          Focus profile: {settings.morningLocation || 'No location set'} · topics {settings.morningNewsTopics || 'none yet'} · facts {settings.morningFactCategories || 'general'}
+          Focus profile: {location} · topics {newsTopics} · facts {factCategories || 'general'}
         </p>
       </div>
 
@@ -418,6 +469,21 @@ function MorningBriefingCard({
       >
         Continue in Chat
       </button>
+    </div>
+  );
+}
+
+function StatusCard({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="p-4">
+      <div className="card p-4 text-center" style={{ minHeight: '30vh' }}>
+        <p className="font-pixel text-[8px]" style={{ color: 'var(--accent)' }}>
+          {title}
+        </p>
+        <p className="text-xs mt-3" style={{ color: 'var(--text-muted)' }}>
+          {message}
+        </p>
+      </div>
     </div>
   );
 }
