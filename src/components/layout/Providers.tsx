@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { getSettings } from '@/lib/db';
 import { useVictoriaStore } from '@/store';
 import i18n from '@/i18n';
 
@@ -12,8 +13,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
     const persistApi = useVictoriaStore.persist;
 
     if (persistApi.hasHydrated()) {
-      useVictoriaStore.setState({ _hasHydrated: true });
-      return;
+      getSettings()
+        .then((dbSettings) => {
+          if (!dbSettings) return;
+          useVictoriaStore.setState((state) => ({
+            settings: {
+              ...state.settings,
+              ...dbSettings,
+            },
+          }));
+        })
+        .catch(() => {
+          // Ignore IndexedDB read failures and fall back to the hydrated store state.
+        })
+        .finally(() => {
+          useVictoriaStore.setState({ _hasHydrated: true });
+        });
+      return undefined;
     }
 
     useVictoriaStore.setState({ _hasHydrated: false });
@@ -27,6 +43,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
     Promise.resolve(persistApi.rehydrate())
       .catch(() => {
         // Fall back to defaults when storage is unavailable or malformed.
+      })
+      .then(async () => {
+        try {
+          const dbSettings = await getSettings();
+          if (!dbSettings) return;
+
+          useVictoriaStore.setState((state) => ({
+            settings: {
+              ...state.settings,
+              ...dbSettings,
+            },
+          }));
+        } catch {
+          // Ignore IndexedDB read failures and keep the in-memory state.
+        }
       })
       .finally(() => {
         useVictoriaStore.setState({ _hasHydrated: true });

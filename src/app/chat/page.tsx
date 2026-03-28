@@ -282,6 +282,7 @@ export default function ChatPage() {
           userName: settings.userName,
           companionContext,
           pinnedContext: currentThread?.pinnedContext,
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           apiKey: settings.tier !== 'free' ? undefined : undefined,
         }),
         signal: abortRef.current.signal,

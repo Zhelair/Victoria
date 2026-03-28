@@ -3,9 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
+import { v4 as uuidv4 } from 'uuid';
 import { useVictoriaStore } from '@/store';
 import { PixelCharacter } from '@/components/home/PixelCharacter';
-import { cn } from '@/lib/utils';
+import { db } from '@/lib/db';
+import { cn, getTodayDateKey } from '@/lib/utils';
+import type { FitnessDay, FitnessPlan, Goal } from '@/types';
 
 type Step = 'welcome' | 'name' | 'goal' | 'wakeTime' | 'done';
 
@@ -21,6 +24,61 @@ export default function OnboardingPage() {
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('');
   const [wakeTime, setWakeTime] = useState('09:00');
+
+  const seedOnboardingData = async (focus: string) => {
+    const [existingGoals, existingPlan] = await Promise.all([
+      db.goals.count(),
+      db.fitnessPlans.filter((plan) => plan.active).first(),
+    ]);
+
+    if (existingGoals === 0) {
+      const starterGoals: Goal[] = [];
+
+      if (focus === 'job' || focus === 'both') {
+        starterGoals.push({
+          id: uuidv4(),
+          text: 'Find a job',
+          horizon: '3months',
+          done: false,
+          createdAt: Date.now(),
+        });
+      }
+
+      if (focus === 'fitness' || focus === 'both') {
+        starterGoals.push({
+          id: uuidv4(),
+          text: 'Build a consistent fitness routine',
+          horizon: '3months',
+          done: false,
+          createdAt: Date.now(),
+        });
+      }
+
+      if (starterGoals.length > 0) {
+        await db.goals.bulkAdd(starterGoals);
+      }
+    }
+
+    if (!existingPlan && (focus === 'fitness' || focus === 'both')) {
+      const days: FitnessDay[] = Array.from({ length: 14 }, (_, i) => ({
+        day: i + 1,
+        workoutType: i % 7 === 0 || i % 7 === 3 ? 'rest' : 'home',
+        exercises: [],
+        done: false,
+      }));
+
+      const starterPlan: FitnessPlan = {
+        id: uuidv4(),
+        title: 'Starter 2 Weeks',
+        createdAt: Date.now(),
+        startDate: getTodayDateKey(),
+        days,
+        active: true,
+      };
+
+      await db.fitnessPlans.add(starterPlan);
+    }
+  };
 
   useEffect(() => {
     if (hasHydrated) {
@@ -42,7 +100,8 @@ export default function OnboardingPage() {
     }
   }, [hasHydrated, settings.onboardingDone, router]);
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
+    await seedOnboardingData(goal);
     updateSettings({
       userName: name || 'friend',
       onboardingDone: true,

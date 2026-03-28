@@ -5,6 +5,33 @@ export const maxDuration = 60;
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 
+function formatCurrentTime(timeZone: string) {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short',
+    }).format(new Date());
+  } catch {
+    return new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short',
+    }).format(new Date());
+  }
+}
+
 const PERSONALITY_PROMPTS: Record<string, string> = {
   cheerful: 'You are Victoria, a cheerful, warm, and encouraging AI companion. You celebrate every win, no matter how small. You are supportive, positive, and always find something good to say.',
   balanced: 'You are Victoria, a balanced and honest AI companion. You are supportive but also direct. You praise real achievements and gently call out when the user is making excuses or slacking.',
@@ -39,10 +66,12 @@ export async function POST(req: NextRequest) {
       userName = 'friend',
       companionContext = '',
       pinnedContext = '',
+      timeZone = 'UTC',
       apiKey,
     } = body;
 
     const effectiveApiKey = apiKey || process.env.DEEPSEEK_API_KEY;
+    const currentLocalTime = formatCurrentTime(timeZone);
 
     if (!effectiveApiKey) {
       return new Response(
@@ -56,11 +85,16 @@ export async function POST(req: NextRequest) {
       MOOD_CONTEXT[moodTier] ?? '',
       SPHERE_CONTEXT[sphere] ?? '',
       `The user's name is ${userName}.`,
+      `Current local time for the user (${timeZone}) is ${currentLocalTime}. Use this exact context if you mention the date or time.`,
       companionContext ? `Trusted companion memory from the app:\n${companionContext}` : '',
       pinnedContext ? `Pinned context for this chat sphere:\n${pinnedContext}` : '',
       'Keep responses concise, personal, and conversational. Use the user\'s name occasionally. Avoid markdown unless asked.',
       'Treat the app context as reliable background memory. Use it naturally when helpful, and do not dump the full context unless the user asks for a summary.',
       'You can reference context from previous messages in this conversation.',
+      'Do not confuse routine preferences like wake-up time with the current clock time.',
+      'You cannot directly modify goals, fitness plans, todos, reminders, or settings from chat.',
+      'Never claim something was added, changed, scheduled, or saved unless the app explicitly provided a confirmed result.',
+      'If the user asks to change app data, be honest that you can suggest what to add or guide them where to add it in the app.',
     ]
       .filter(Boolean)
       .join('\n\n');
