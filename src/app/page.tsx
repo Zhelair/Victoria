@@ -70,7 +70,7 @@ export default function HomePage() {
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification('Good morning! ☀️', {
             body: `Time to check in, ${settings.userName || 'friend'}. Victoria is waiting.`,
-            icon: '/icon-192.png',
+            icon: '/icons/icon-192.svg',
           });
         }
       }
