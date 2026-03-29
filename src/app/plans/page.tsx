@@ -774,12 +774,6 @@ function RemindersTab() {
         throw new Error('Pick a future time for one-time reminders.');
       }
 
-      if (settings.notificationsEnabled) {
-        await bootstrapReminderPush().catch(() => {
-          // Allow creating the reminder even if push bootstrap fails.
-        });
-      }
-
       const reminder = await createReminderFromDraft({
         title: title.trim(),
         note: note.trim() || undefined,
@@ -800,6 +794,16 @@ function RemindersTab() {
       const oneHour = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       setScheduledAt(toDateTimeLocalValue(oneHour));
       setStatus(`Saved reminder: ${buildReminderSummary(reminder, i18n.language)}`);
+
+      if (settings.notificationsEnabled) {
+        void bootstrapReminderPush().then((bootstrap) => {
+          if (!bootstrap.ok && bootstrap.reason !== 'permission-denied' && bootstrap.reason !== 'missing-vapid-key') {
+            setError(`Reminder saved, but push setup is incomplete: ${String(bootstrap.reason)}`);
+          }
+        }).catch(() => {
+          setError('Reminder saved, but push setup is incomplete.');
+        });
+      }
     } catch (createError: any) {
       setError(createError.message || 'Could not create reminder.');
     } finally {
