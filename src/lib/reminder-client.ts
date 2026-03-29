@@ -90,6 +90,32 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessa
   }
 }
 
+function getPushFailureReason(error: unknown) {
+  if (!error) return 'push-setup-failed';
+
+  if (error instanceof Error) {
+    const message = error.message || '';
+    if (
+      message === 'service-worker-timeout' ||
+      message === 'subscription-read-timeout' ||
+      message === 'subscription-create-timeout' ||
+      message === 'bootstrap-request-timeout'
+    ) {
+      return message;
+    }
+
+    const normalizedName = 'name' in error && typeof error.name === 'string' ? error.name : '';
+    if (normalizedName === 'NotAllowedError') return 'subscription-blocked';
+    if (normalizedName === 'AbortError') return 'subscription-aborted';
+    if (normalizedName === 'InvalidStateError') return 'service-worker-not-ready';
+    if (normalizedName === 'InvalidAccessError') return 'invalid-vapid-key';
+
+    if (message) return message;
+  }
+
+  return 'push-setup-failed';
+}
+
 export async function bootstrapReminderPush() {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return { ok: false as const, reason: 'unsupported' };
@@ -113,44 +139,51 @@ export async function bootstrapReminderPush() {
     return { ok: false as const, reason: 'permission-denied' };
   }
 
-  const registration = await withTimeout(
-    navigator.serviceWorker.ready,
-    5000,
-    'service-worker-timeout'
-  );
-  const existing = await withTimeout(
-    registration.pushManager.getSubscription(),
-    5000,
-    'subscription-read-timeout'
-  );
-  const subscription = existing ?? await withTimeout(
-    registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-    }),
-    8000,
-    'subscription-create-timeout'
-  );
-
-  const response = await withTimeout(
-    fetch('/api/reminders/bootstrap', {
-      method: 'POST',
-      headers: getReminderHeaders(),
-      body: JSON.stringify({
-        subscription: subscription.toJSON(),
-        userAgent: navigator.userAgent,
+  try {
+    const registration = await withTimeout(
+      navigator.serviceWorker.ready,
+      5000,
+      'service-worker-timeout'
+    );
+    const existing = await withTimeout(
+      registration.pushManager.getSubscription(),
+      5000,
+      'subscription-read-timeout'
+    );
+    const subscription = existing ?? await withTimeout(
+      registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
       }),
-    }),
-    8000,
-    'bootstrap-request-timeout'
-  );
+      8000,
+      'subscription-create-timeout'
+    );
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    return { ok: false as const, reason: error?.error ?? 'bootstrap-failed' };
+    const response = await withTimeout(
+      fetch('/api/reminders/bootstrap', {
+        method: 'POST',
+        headers: getReminderHeaders(),
+        body: JSON.stringify({
+          subscription: subscription.toJSON(),
+          userAgent: navigator.userAgent,
+        }),
+      }),
+      8000,
+      'bootstrap-request-timeout'
+    );
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      return { ok: false as const, reason: error?.error ?? 'bootstrap-failed' };
+    }
+
+    return { ok: true as const };
+  } catch (error) {
+    return {
+      ok: false as const,
+      reason: getPushFailureReason(error),
+    };
   }
-
-  return { ok: true as const };
 }
 
 export async function syncRemindersFromServer() {
