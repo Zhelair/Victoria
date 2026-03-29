@@ -97,6 +97,8 @@ function getPushFailureReason(error: unknown) {
     const message = error.message || '';
     if (
       message === 'service-worker-timeout' ||
+      message === 'service-worker-activation-timeout' ||
+      message === 'service-worker-redundant' ||
       message === 'subscription-read-timeout' ||
       message === 'subscription-create-timeout' ||
       message === 'bootstrap-request-timeout'
@@ -114,6 +116,54 @@ function getPushFailureReason(error: unknown) {
   }
 
   return 'push-setup-failed';
+}
+
+function waitForServiceWorkerActivation(registration: ServiceWorkerRegistration) {
+  const worker = registration.installing ?? registration.waiting ?? registration.active;
+  if (!worker) {
+    return Promise.resolve(registration);
+  }
+
+  if (worker.state === 'activated') {
+    return Promise.resolve(registration);
+  }
+
+  return new Promise<ServiceWorkerRegistration>((resolve, reject) => {
+    const handleStateChange = () => {
+      if (worker.state === 'activated') {
+        worker.removeEventListener('statechange', handleStateChange);
+        resolve(registration);
+      } else if (worker.state === 'redundant') {
+        worker.removeEventListener('statechange', handleStateChange);
+        reject(new Error('service-worker-redundant'));
+      }
+    };
+
+    worker.addEventListener('statechange', handleStateChange);
+  });
+}
+
+async function ensureServiceWorkerReady() {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    throw new Error('unsupported');
+  }
+
+  const existingRegistration = await navigator.serviceWorker.getRegistration('/');
+  const registration = existingRegistration ?? await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+
+  if (registration.installing || registration.waiting) {
+    await withTimeout(
+      waitForServiceWorkerActivation(registration),
+      8000,
+      'service-worker-activation-timeout'
+    );
+  }
+
+  return withTimeout(
+    navigator.serviceWorker.ready,
+    8000,
+    'service-worker-timeout'
+  );
 }
 
 export async function bootstrapReminderPush() {
@@ -140,11 +190,7 @@ export async function bootstrapReminderPush() {
   }
 
   try {
-    const registration = await withTimeout(
-      navigator.serviceWorker.ready,
-      5000,
-      'service-worker-timeout'
-    );
+    const registration = await ensureServiceWorkerReady();
     const existing = await withTimeout(
       registration.pushManager.getSubscription(),
       5000,
