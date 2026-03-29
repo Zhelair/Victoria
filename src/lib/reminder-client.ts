@@ -75,6 +75,21 @@ function urlBase64ToUint8Array(base64String: string) {
   return Uint8Array.from(rawData.split('').map((char) => char.charCodeAt(0)));
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export async function bootstrapReminderPush() {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     return { ok: false as const, reason: 'unsupported' };
@@ -98,21 +113,37 @@ export async function bootstrapReminderPush() {
     return { ok: false as const, reason: 'permission-denied' };
   }
 
-  const registration = await navigator.serviceWorker.ready;
-  const existing = await registration.pushManager.getSubscription();
-  const subscription = existing ?? await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-  });
-
-  const response = await fetch('/api/reminders/bootstrap', {
-    method: 'POST',
-    headers: getReminderHeaders(),
-    body: JSON.stringify({
-      subscription: subscription.toJSON(),
-      userAgent: navigator.userAgent,
+  const registration = await withTimeout(
+    navigator.serviceWorker.ready,
+    5000,
+    'service-worker-timeout'
+  );
+  const existing = await withTimeout(
+    registration.pushManager.getSubscription(),
+    5000,
+    'subscription-read-timeout'
+  );
+  const subscription = existing ?? await withTimeout(
+    registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
     }),
-  });
+    8000,
+    'subscription-create-timeout'
+  );
+
+  const response = await withTimeout(
+    fetch('/api/reminders/bootstrap', {
+      method: 'POST',
+      headers: getReminderHeaders(),
+      body: JSON.stringify({
+        subscription: subscription.toJSON(),
+        userAgent: navigator.userAgent,
+      }),
+    }),
+    8000,
+    'bootstrap-request-timeout'
+  );
 
   if (!response.ok) {
     const error = await response.json().catch(() => null);
