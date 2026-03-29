@@ -663,6 +663,7 @@ function RemindersTab() {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [highlightedReminderId, setHighlightedReminderId] = useState<string | null>(null);
   const [shouldSpeak, setShouldSpeak] = useState(false);
 
@@ -758,29 +759,27 @@ function RemindersTab() {
   const handleCreateReminder = async () => {
     setStatus(null);
     setError(null);
-    if (!title.trim()) {
-      setError('Add a reminder title first.');
-      return;
-    }
-
-    const scheduledDate = new Date(scheduledAt);
-    if (Number.isNaN(scheduledDate.getTime())) {
-      setError('Pick a valid reminder time.');
-      return;
-    }
-
-    if (repeat === 'once' && scheduledDate.getTime() <= Date.now()) {
-      setError('Pick a future time for one-time reminders.');
-      return;
-    }
-
-    if (settings.notificationsEnabled) {
-      await bootstrapReminderPush().catch(() => {
-        // Allow creating the reminder even if push bootstrap fails.
-      });
-    }
-
+    setIsSaving(true);
     try {
+      if (!title.trim()) {
+        throw new Error('Add a reminder title first.');
+      }
+
+      const scheduledDate = new Date(scheduledAt);
+      if (Number.isNaN(scheduledDate.getTime())) {
+        throw new Error('Pick a valid reminder time.');
+      }
+
+      if (repeat === 'once' && scheduledDate.getTime() <= Date.now()) {
+        throw new Error('Pick a future time for one-time reminders.');
+      }
+
+      if (settings.notificationsEnabled) {
+        await bootstrapReminderPush().catch(() => {
+          // Allow creating the reminder even if push bootstrap fails.
+        });
+      }
+
       const reminder = await createReminderFromDraft({
         title: title.trim(),
         note: note.trim() || undefined,
@@ -803,6 +802,8 @@ function RemindersTab() {
       setStatus(`Saved reminder: ${buildReminderSummary(reminder, i18n.language)}`);
     } catch (createError: any) {
       setError(createError.message || 'Could not create reminder.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -875,7 +876,13 @@ function RemindersTab() {
         )}
       </div>
 
-      <div className="card p-4 space-y-4">
+      <form
+        className="card p-4 space-y-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void handleCreateReminder();
+        }}
+      >
         <div>
           <h3 className="font-pixel text-[8px]" style={{ color: 'var(--text-muted)' }}>
             Create reminder
@@ -993,6 +1000,7 @@ function RemindersTab() {
         </div>
 
         <button
+          type="button"
           onClick={() => setVoicePreferred((prev) => !prev)}
           className="w-full px-3 py-2 rounded-xl font-pixel text-[7px] transition-all active:scale-95"
           style={{
@@ -1005,13 +1013,18 @@ function RemindersTab() {
         </button>
 
         <button
-          onClick={() => void handleCreateReminder()}
+          type="submit"
+          disabled={isSaving}
           className="w-full py-3 rounded-xl font-pixel text-[8px] text-white transition-all active:scale-95"
-          style={{ backgroundColor: 'var(--accent)' }}
+          style={{
+            backgroundColor: 'var(--accent)',
+            opacity: isSaving ? 0.7 : 1,
+            cursor: isSaving ? 'progress' : 'pointer',
+          }}
         >
-          Save reminder
+          {isSaving ? 'Saving...' : 'Save reminder'}
         </button>
-      </div>
+      </form>
 
       <div className="space-y-4">
         <div>
