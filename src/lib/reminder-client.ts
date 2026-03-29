@@ -147,25 +147,63 @@ function waitForServiceWorkerActivation(registration: ServiceWorkerRegistration)
   });
 }
 
+async function registerFreshServiceWorker() {
+  await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+  return withTimeout(
+    navigator.serviceWorker.ready,
+    12000,
+    'service-worker-timeout'
+  );
+}
+
 async function ensureServiceWorkerReady() {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
     throw new Error('unsupported');
   }
 
   const existingRegistration = await navigator.serviceWorker.getRegistration();
+
+  if (existingRegistration?.active) {
+    return withTimeout(
+      navigator.serviceWorker.ready,
+      12000,
+      'service-worker-timeout'
+    );
+  }
+
   const registration = existingRegistration ?? await navigator.serviceWorker.register('/sw.js', { scope: '/' });
 
   if (registration.installing || registration.waiting) {
-    await withTimeout(
-      waitForServiceWorkerActivation(registration),
-      8000,
-      'service-worker-activation-timeout'
-    );
+    try {
+      await withTimeout(
+        waitForServiceWorkerActivation(registration),
+        12000,
+        'service-worker-activation-timeout'
+      );
+    } catch (error) {
+      const reason = getPushFailureReason(error);
+      if (reason !== 'service-worker-redundant') {
+        throw error;
+      }
+
+      const refreshedRegistration = await navigator.serviceWorker.getRegistration();
+      if (refreshedRegistration?.active) {
+        return withTimeout(
+          navigator.serviceWorker.ready,
+          12000,
+          'service-worker-timeout'
+        );
+      }
+
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((entry) => entry.unregister().catch(() => false)));
+      return registerFreshServiceWorker();
+    }
   }
 
   return withTimeout(
     navigator.serviceWorker.ready,
-    8000,
+    12000,
     'service-worker-timeout'
   );
 }
