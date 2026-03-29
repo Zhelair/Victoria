@@ -96,10 +96,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     if (!notificationsEnabled) return;
 
     import('@/lib/reminder-client')
-      .then(async ({ bootstrapReminderPush, syncRemindersFromServer }) => {
-        await bootstrapReminderPush().catch(() => {
-          // Keep app usable when push setup is unavailable.
-        });
+      .then(async ({ syncRemindersFromServer }) => {
         await syncRemindersFromServer().catch(() => {
           // Keep app usable when the remote reminder mirror is unavailable.
         });
