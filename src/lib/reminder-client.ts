@@ -1,11 +1,15 @@
 'use client';
 
 import { db } from '@/lib/db';
+import { v4 as uuidv4 } from 'uuid';
+import { useVictoriaStore } from '@/store';
 import {
   REMINDER_DEVICE_ID_KEY,
   REMINDER_DEVICE_SECRET_KEY,
   REMINDER_SPEAK_KEY,
   buildReminderSummary,
+  computeNextReminderTrigger,
+  computeSnoozedTrigger,
   decryptReminderRow,
   encryptReminderDraft,
   type ReminderDraft,
@@ -16,6 +20,151 @@ import type { Reminder } from '@/types';
 let bootstrapReminderPushPromise: Promise<
   { ok: true } | { ok: false; reason: string }
 > | null = null;
+
+function canUseRemoteReminderBackend() {
+  return Boolean(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY);
+}
+
+function shouldFallbackToLocal(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('not configured') ||
+    normalized.includes('missing-vapid-key') ||
+    normalized.includes('push-setup-failed') ||
+    normalized.includes('bootstrap-failed') ||
+    normalized.includes('sync-failed') ||
+    normalized.includes('fetch failed') ||
+    normalized.includes('failed to fetch') ||
+    normalized.includes('networkerror') ||
+    normalized.includes('timeout')
+  );
+}
+
+function buildLocalReminder(draft: ReminderDraft): Reminder {
+  const now = Date.now();
+  const nextTriggerAt =
+    computeNextReminderTrigger(draft.scheduledFor, draft.repeat, new Date(now - 1000)) ??
+    draft.scheduledFor;
+
+  return {
+    id: uuidv4(),
+    title: draft.title,
+    note: draft.note,
+    scheduledFor: draft.scheduledFor,
+    nextTriggerAt,
+    repeat: draft.repeat,
+    category: draft.category,
+    sound: draft.sound,
+    voicePreferred: draft.voicePreferred,
+    timeZone: draft.timeZone,
+    active: true,
+    createdAt: now,
+    updatedAt: now,
+    syncState: 'local',
+  };
+}
+
+async function saveLocalReminder(draft: ReminderDraft) {
+  const reminder = buildLocalReminder(draft);
+  await db.reminders.put(reminder);
+  return reminder;
+}
+
+async function patchLocalReminder(reminderId: string, updates: Partial<ReminderDraft> & { active?: boolean }) {
+  const reminder = await db.reminders.get(reminderId);
+  if (!reminder) {
+    throw new Error('Reminder not found.');
+  }
+
+  const scheduledFor = updates.scheduledFor ?? reminder.scheduledFor;
+  const repeat = updates.repeat ?? reminder.repeat;
+  const nextTriggerAt = computeNextReminderTrigger(
+    scheduledFor,
+    repeat,
+    new Date(Date.now() - 1000)
+  ) ?? scheduledFor;
+
+  const updated: Reminder = {
+    ...reminder,
+    title: updates.title ?? reminder.title,
+    note: updates.note ?? reminder.note,
+    scheduledFor,
+    nextTriggerAt,
+    repeat,
+    category: updates.category ?? reminder.category,
+    sound: updates.sound ?? reminder.sound,
+    voicePreferred: updates.voicePreferred ?? reminder.voicePreferred,
+    timeZone: updates.timeZone ?? reminder.timeZone,
+    active: updates.active ?? reminder.active,
+    updatedAt: Date.now(),
+    syncState: 'local',
+  };
+
+  await db.reminders.put(updated);
+  return updated;
+}
+
+async function applyLocalReminderAction(reminderId: string, action: 'done' | 'snooze' | 'open') {
+  const reminder = await db.reminders.get(reminderId);
+  if (!reminder) return null;
+  if (action === 'open') return reminder;
+
+  const now = new Date();
+  const nowIso = now.toISOString();
+  let updated: Reminder = {
+    ...reminder,
+    updatedAt: now.getTime(),
+    syncState: 'local',
+  };
+
+  if (action === 'snooze') {
+    updated = {
+      ...updated,
+      active: true,
+      nextTriggerAt: computeSnoozedTrigger(),
+    };
+  } else {
+    const nextTriggerAt = computeNextReminderTrigger(reminder.nextTriggerAt, reminder.repeat, now);
+    updated = nextTriggerAt
+      ? {
+          ...updated,
+          completedAt: nowIso,
+          lastTriggeredAt: nowIso,
+          nextTriggerAt,
+          active: true,
+        }
+      : {
+          ...updated,
+          completedAt: nowIso,
+          lastTriggeredAt: nowIso,
+          active: false,
+        };
+  }
+
+  await db.reminders.put(updated);
+  return updated;
+}
+
+function speakReminderWithCurrentSettings(reminder: Reminder) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
+  const { settings } = useVictoriaStore.getState();
+  if (!settings.voiceEnabled || !reminder.voicePreferred) return;
+
+  const utterance = new SpeechSynthesisUtterance(
+    `${reminder.title}.${reminder.note ? ` ${reminder.note}` : ''}`
+  );
+  utterance.rate = settings.voiceRate;
+  utterance.pitch = settings.voicePitch;
+  utterance.lang = settings.language;
+  if (settings.selectedVoiceName) {
+    const voice = window.speechSynthesis.getVoices().find((entry) => entry.name === settings.selectedVoiceName);
+    if (voice) utterance.voice = voice;
+  }
+
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(utterance);
+}
 
 function getStoredValue(key: string) {
   try {
@@ -213,6 +362,10 @@ export async function bootstrapReminderPush() {
     return { ok: false as const, reason: 'unsupported' };
   }
 
+  if (!canUseRemoteReminderBackend()) {
+    return { ok: false as const, reason: 'local-only-mode' };
+  }
+
   const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   if (!vapidPublicKey) {
     return { ok: false as const, reason: 'missing-vapid-key' };
@@ -286,54 +439,99 @@ export async function syncRemindersFromServer() {
   const creds = getReminderDeviceCredentials();
   if (!creds) return { ok: false as const, reason: 'missing-credentials' };
 
-  const response = await fetch('/api/reminders', {
-    method: 'GET',
-    headers: getReminderHeaders(),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    return { ok: false as const, reason: error?.error ?? 'sync-failed' };
+  if (!canUseRemoteReminderBackend()) {
+    return {
+      ok: true as const,
+      reminders: await db.reminders.orderBy('nextTriggerAt').toArray(),
+      mode: 'local' as const,
+    };
   }
 
-  const payload = await response.json();
-  const rows = (payload.reminders ?? []) as ReminderRow[];
-  const decrypted = await Promise.all(rows.map((row) => decryptReminderRow(row, creds.deviceSecret)));
-  await db.reminders.bulkPut(decrypted);
+  try {
+    const response = await fetch('/api/reminders', {
+      method: 'GET',
+      headers: getReminderHeaders(),
+    });
 
-  const ids = new Set(decrypted.map((reminder) => reminder.id));
-  const localRows = await db.reminders.toArray();
-  const staleIds = localRows
-    .filter((reminder) => reminder.syncState === 'synced' && !ids.has(reminder.id))
-    .map((reminder) => reminder.id);
-  if (staleIds.length > 0) {
-    await db.reminders.bulkDelete(staleIds);
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      const reason = error?.error ?? 'sync-failed';
+      if (shouldFallbackToLocal(reason)) {
+        return {
+          ok: true as const,
+          reminders: await db.reminders.orderBy('nextTriggerAt').toArray(),
+          mode: 'local' as const,
+        };
+      }
+      return { ok: false as const, reason, mode: 'remote' as const };
+    }
+
+    const payload = await response.json();
+    const rows = (payload.reminders ?? []) as ReminderRow[];
+    const decrypted = await Promise.all(rows.map((row) => decryptReminderRow(row, creds.deviceSecret)));
+    await db.reminders.bulkPut(decrypted);
+
+    const ids = new Set(decrypted.map((reminder) => reminder.id));
+    const localRows = await db.reminders.toArray();
+    const staleIds = localRows
+      .filter((reminder) => reminder.syncState === 'synced' && !ids.has(reminder.id))
+      .map((reminder) => reminder.id);
+    if (staleIds.length > 0) {
+      await db.reminders.bulkDelete(staleIds);
+    }
+
+    return { ok: true as const, reminders: decrypted, mode: 'remote' as const };
+  } catch (error) {
+    const reason = getPushFailureReason(error);
+    if (shouldFallbackToLocal(reason)) {
+      return {
+        ok: true as const,
+        reminders: await db.reminders.orderBy('nextTriggerAt').toArray(),
+        mode: 'local' as const,
+      };
+    }
+
+    return { ok: false as const, reason, mode: 'remote' as const };
   }
-
-  return { ok: true as const, reminders: decrypted };
 }
 
 export async function createReminderFromDraft(draft: ReminderDraft) {
   const creds = getReminderDeviceCredentials();
   if (!creds) throw new Error('Reminder credentials are unavailable in this browser.');
 
-  const encrypted = await encryptReminderDraft(draft, creds.deviceSecret);
-  const response = await fetch('/api/reminders', {
-    method: 'POST',
-    headers: getReminderHeaders(),
-    body: JSON.stringify(encrypted),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    throw new Error(error?.error ?? 'Could not create reminder.');
+  if (!canUseRemoteReminderBackend()) {
+    return saveLocalReminder(draft);
   }
 
-  const payload = await response.json();
-  const reminder = await decryptReminderRow(payload.reminder as ReminderRow, creds.deviceSecret);
-  await db.reminders.put(reminder);
+  try {
+    const encrypted = await encryptReminderDraft(draft, creds.deviceSecret);
+    const response = await fetch('/api/reminders', {
+      method: 'POST',
+      headers: getReminderHeaders(),
+      body: JSON.stringify(encrypted),
+    });
 
-  return reminder;
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      const reason = error?.error ?? 'Could not create reminder.';
+      if (shouldFallbackToLocal(reason)) {
+        return saveLocalReminder(draft);
+      }
+      throw new Error(reason);
+    }
+
+    const payload = await response.json();
+    const reminder = await decryptReminderRow(payload.reminder as ReminderRow, creds.deviceSecret);
+    await db.reminders.put(reminder);
+
+    return reminder;
+  } catch (error: any) {
+    const reason = error?.message ?? 'Could not create reminder.';
+    if (shouldFallbackToLocal(reason)) {
+      return saveLocalReminder(draft);
+    }
+    throw error;
+  }
 }
 
 export async function patchReminder(reminderId: string, updates: Partial<ReminderDraft> & { active?: boolean }) {
@@ -342,6 +540,10 @@ export async function patchReminder(reminderId: string, updates: Partial<Reminde
 
   const local = await db.reminders.get(reminderId);
   if (!local) throw new Error('Reminder not found.');
+
+  if (!canUseRemoteReminderBackend() || local.syncState === 'local' || local.syncState === 'pending') {
+    return patchLocalReminder(reminderId, updates);
+  }
 
   const merged: ReminderDraft = {
     title: updates.title ?? local.title,
@@ -354,66 +556,115 @@ export async function patchReminder(reminderId: string, updates: Partial<Reminde
     timeZone: updates.timeZone ?? local.timeZone,
   };
 
-  const encrypted = await encryptReminderDraft(merged, creds.deviceSecret);
-  const response = await fetch(`/api/reminders/${reminderId}`, {
-    method: 'PATCH',
-    headers: getReminderHeaders(),
-    body: JSON.stringify({
-      ...encrypted,
-      active: updates.active,
-    }),
-  });
+  try {
+    const encrypted = await encryptReminderDraft(merged, creds.deviceSecret);
+    const response = await fetch(`/api/reminders/${reminderId}`, {
+      method: 'PATCH',
+      headers: getReminderHeaders(),
+      body: JSON.stringify({
+        ...encrypted,
+        active: updates.active,
+      }),
+    });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    throw new Error(error?.error ?? 'Could not update reminder.');
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      const reason = error?.error ?? 'Could not update reminder.';
+      if (shouldFallbackToLocal(reason)) {
+        return patchLocalReminder(reminderId, updates);
+      }
+      throw new Error(reason);
+    }
+
+    const payload = await response.json();
+    const reminder = await decryptReminderRow(payload.reminder as ReminderRow, creds.deviceSecret);
+    await db.reminders.put(reminder);
+    return reminder;
+  } catch (error: any) {
+    const reason = error?.message ?? 'Could not update reminder.';
+    if (shouldFallbackToLocal(reason)) {
+      return patchLocalReminder(reminderId, updates);
+    }
+    throw error;
   }
-
-  const payload = await response.json();
-  const reminder = await decryptReminderRow(payload.reminder as ReminderRow, creds.deviceSecret);
-  await db.reminders.put(reminder);
-  return reminder;
 }
 
 export async function removeReminder(reminderId: string) {
-  const response = await fetch(`/api/reminders/${reminderId}`, {
-    method: 'DELETE',
-    headers: getReminderHeaders(),
-  });
+  const reminder = await db.reminders.get(reminderId);
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    throw new Error(error?.error ?? 'Could not delete reminder.');
+  if (!canUseRemoteReminderBackend() || reminder?.syncState === 'local' || reminder?.syncState === 'pending') {
+    await db.reminders.delete(reminderId);
+    return;
   }
 
-  await db.reminders.delete(reminderId);
+  try {
+    const response = await fetch(`/api/reminders/${reminderId}`, {
+      method: 'DELETE',
+      headers: getReminderHeaders(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      const reason = error?.error ?? 'Could not delete reminder.';
+      if (shouldFallbackToLocal(reason)) {
+        await db.reminders.delete(reminderId);
+        return;
+      }
+      throw new Error(reason);
+    }
+
+    await db.reminders.delete(reminderId);
+  } catch (error: any) {
+    const reason = error?.message ?? 'Could not delete reminder.';
+    if (shouldFallbackToLocal(reason)) {
+      await db.reminders.delete(reminderId);
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function sendReminderAction(reminderId: string, action: 'done' | 'snooze' | 'open') {
   const reminder = await db.reminders.get(reminderId);
   if (!reminder) return null;
 
-  const response = await fetch('/api/reminders/action', {
-    method: 'POST',
-    headers: getReminderHeaders(),
-    body: JSON.stringify({ reminderId, action }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    throw new Error(error?.error ?? 'Could not update reminder.');
+  if (!canUseRemoteReminderBackend() || reminder.syncState === 'local' || reminder.syncState === 'pending') {
+    return applyLocalReminderAction(reminderId, action);
   }
 
-  const payload = await response.json();
-  const updated = payload.reminder
-    ? await decryptReminderRow(payload.reminder as ReminderRow, getReminderDeviceCredentials()!.deviceSecret)
-    : null;
+  try {
+    const response = await fetch('/api/reminders/action', {
+      method: 'POST',
+      headers: getReminderHeaders(),
+      body: JSON.stringify({ reminderId, action }),
+    });
 
-  if (updated) {
-    await db.reminders.put(updated);
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      const reason = error?.error ?? 'Could not update reminder.';
+      if (shouldFallbackToLocal(reason)) {
+        return applyLocalReminderAction(reminderId, action);
+      }
+      throw new Error(reason);
+    }
+
+    const payload = await response.json();
+    const updated = payload.reminder
+      ? await decryptReminderRow(payload.reminder as ReminderRow, getReminderDeviceCredentials()!.deviceSecret)
+      : null;
+
+    if (updated) {
+      await db.reminders.put(updated);
+    }
+
+    return updated;
+  } catch (error: any) {
+    const reason = error?.message ?? 'Could not update reminder.';
+    if (shouldFallbackToLocal(reason)) {
+      return applyLocalReminderAction(reminderId, action);
+    }
+    throw error;
   }
-
-  return updated;
 }
 
 export function queueReminderSpeech(reminderId: string) {
@@ -435,4 +686,51 @@ export function consumeReminderSpeechRequest() {
 
 export function getReminderSuccessMessage(reminder: Reminder, locale = 'en-US') {
   return `${reminder.title} · ${buildReminderSummary(reminder, locale)}`;
+}
+
+export async function dispatchLocalDueReminders() {
+  if (typeof window === 'undefined' || !('Notification' in window)) return 0;
+  if (Notification.permission !== 'granted') return 0;
+  if (canUseRemoteReminderBackend()) return 0;
+
+  const now = new Date();
+  const reminders = await db.reminders.toArray();
+  const due = reminders.filter(
+    (reminder) => reminder.active && new Date(reminder.nextTriggerAt).getTime() <= now.getTime()
+  );
+
+  for (const reminder of due) {
+    const notification = new Notification(reminder.title, {
+      body: reminder.note || 'Open Victoria to check this off.',
+      icon: '/icons/icon-192.svg',
+      silent: reminder.sound === 'silent',
+      tag: `victoria-local-reminder-${reminder.id}`,
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      const url = new URL(window.location.href);
+      url.pathname = '/plans';
+      url.searchParams.set('tab', 'reminders');
+      url.searchParams.set('reminder', reminder.id);
+      window.location.href = url.toString();
+    };
+
+    if (reminder.voicePreferred) {
+      speakReminderWithCurrentSettings(reminder);
+    }
+
+    const nextTriggerAt = computeNextReminderTrigger(reminder.nextTriggerAt, reminder.repeat, now);
+    await db.reminders.put({
+      ...reminder,
+      lastTriggeredAt: now.toISOString(),
+      completedAt: reminder.repeat === 'once' ? now.toISOString() : reminder.completedAt,
+      nextTriggerAt: nextTriggerAt ?? reminder.nextTriggerAt,
+      active: Boolean(nextTriggerAt),
+      updatedAt: Date.now(),
+      syncState: 'local',
+    });
+  }
+
+  return due.length;
 }

@@ -192,7 +192,7 @@ export interface Reminder {
   updatedAt: number;
   lastTriggeredAt?: string;
   completedAt?: string;
-  syncState?: 'pending' | 'synced' | 'error';
+  syncState?: 'pending' | 'synced' | 'error' | 'local';
 }
 
 export interface TodoItem {

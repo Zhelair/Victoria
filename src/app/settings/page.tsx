@@ -483,7 +483,7 @@ export default function SettingsPage() {
                 />
                 {settings.notificationsEnabled && (
                   <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                    Morning alarm and reminders will use the installed PWA notifications when available.
+                    Morning alarm and reminder nudges can notify you while Victoria is open, and full push mode returns when the remote reminder backend is connected again.
                   </p>
                 )}
                 {!settings.notificationsEnabled && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied' && (

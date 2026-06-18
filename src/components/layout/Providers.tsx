@@ -9,6 +9,7 @@ import i18n from '@/i18n';
 export function Providers({ children }: { children: React.ReactNode }) {
   const theme = useVictoriaStore((s) => s.settings.theme);
   const language = useVictoriaStore((s) => s.settings.language);
+  const notificationsEnabled = useVictoriaStore((s) => s.settings.notificationsEnabled);
 
   useEffect(() => {
     const persistApi = useVictoriaStore.persist;
@@ -92,19 +93,40 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }, [language]);
 
   useEffect(() => {
-    const notificationsEnabled = useVictoriaStore.getState().settings.notificationsEnabled;
-    if (!notificationsEnabled) return;
+    let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
-    import('@/lib/reminder-client')
-      .then(async ({ syncRemindersFromServer }) => {
+    const run = async () => {
+      try {
+        const { dispatchLocalDueReminders, syncRemindersFromServer } = await import('@/lib/reminder-client');
         await syncRemindersFromServer().catch(() => {
-          // Keep app usable when the remote reminder mirror is unavailable.
+          // Keep app usable when the reminder backend is unavailable.
         });
-      })
-      .catch(() => {
-        // Ignore reminder bootstrap failures.
-      });
-  }, []);
+        if (!cancelled && notificationsEnabled) {
+          await dispatchLocalDueReminders().catch(() => {
+            // Ignore notification delivery failures and keep the app responsive.
+          });
+        }
+      } catch {
+        // Ignore reminder client bootstrap failures.
+      }
+    };
+
+    void run();
+
+    if (notificationsEnabled) {
+      intervalId = setInterval(() => {
+        void run();
+      }, 30_000);
+    }
+
+    return () => {
+      cancelled = true;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [notificationsEnabled]);
 
   return <>{children}</>;
 }

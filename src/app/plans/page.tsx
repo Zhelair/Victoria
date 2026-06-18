@@ -664,6 +664,7 @@ function RemindersTab() {
   const [error, setError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [reminderMode, setReminderMode] = useState<'remote' | 'local'>('local');
   const [highlightedReminderId, setHighlightedReminderId] = useState<string | null>(null);
   const [shouldSpeak, setShouldSpeak] = useState(false);
 
@@ -682,11 +683,13 @@ function RemindersTab() {
     const syncResult = await syncRemindersFromServer().catch((syncError: Error) => ({
       ok: false as const,
       reason: syncError.message,
+      mode: 'remote' as const,
     }));
+    if ('mode' in syncResult && syncResult.mode) {
+      setReminderMode(syncResult.mode);
+    }
     if (!syncResult.ok) {
-      setError(syncResult.reason === 'Reminder backend is not configured yet.'
-        ? 'Configure Supabase + VAPID keys to turn on real push reminders.'
-        : String(syncResult.reason));
+      setError(String(syncResult.reason));
     } else {
       setError(null);
     }
@@ -702,7 +705,13 @@ function RemindersTab() {
           ok: false as const,
           reason: bootstrapError.message,
         }));
-        if (!cancelled && !bootstrap.ok && bootstrap.reason !== 'permission-denied' && bootstrap.reason !== 'missing-vapid-key') {
+        if (
+          !cancelled &&
+          !bootstrap.ok &&
+          bootstrap.reason !== 'permission-denied' &&
+          bootstrap.reason !== 'missing-vapid-key' &&
+          bootstrap.reason !== 'local-only-mode'
+        ) {
           setError(String(bootstrap.reason));
         }
       }
@@ -846,10 +855,12 @@ function RemindersTab() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h3 className="font-pixel text-[8px]" style={{ color: 'var(--accent)' }}>
-              Real reminder center
+              {reminderMode === 'remote' ? 'Remote reminder center' : 'Local reminder deck'}
             </h3>
             <p className="text-xs mt-2 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-              Reminder text is encrypted before it leaves this device. Victoria stores only ciphertext remotely so reminders can still fire when the app is closed.
+              {reminderMode === 'remote'
+                ? 'Reminder text is encrypted before it leaves this device. Victoria stores only ciphertext remotely so closed-app push can still work.'
+                : 'Supabase push is offline right now, so Victoria is keeping reminders on this device and can still nudge you while the app is open.'}
             </p>
           </div>
           <button
@@ -857,13 +868,13 @@ function RemindersTab() {
             className="px-3 py-2 rounded-xl font-pixel text-[7px]"
             style={{ backgroundColor: 'var(--shell)', color: 'var(--text-muted)' }}
           >
-            {isSyncing ? 'Syncing...' : 'Refresh'}
+            {isSyncing ? 'Syncing...' : reminderMode === 'remote' ? 'Refresh' : 'Reload'}
           </button>
         </div>
 
         {!settings.notificationsEnabled && (
           <p className="text-[11px] leading-relaxed" style={{ color: '#f59e0b' }}>
-            Turn on notifications in Settings so reminders can wake the installed app in the background.
+            Turn on notifications in Settings so Victoria can surface reminder nudges on this device.
           </p>
         )}
 
@@ -1137,6 +1148,7 @@ function ReminderCard({
         <Badge>{reminder.repeat}</Badge>
         <Badge>{reminder.sound === 'silent' ? 'silent' : 'sound on'}</Badge>
         {reminder.voicePreferred ? <Badge>voice</Badge> : null}
+        {reminder.syncState === 'local' ? <Badge>device only</Badge> : null}
       </div>
 
       {reminder.note ? (
