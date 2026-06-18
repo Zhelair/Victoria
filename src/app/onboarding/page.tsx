@@ -3,15 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import { v4 as uuidv4 } from 'uuid';
 import { useVictoriaStore } from '@/store';
 import { PixelCharacter } from '@/components/home/PixelCharacter';
-import { db } from '@/lib/db';
-import { createFitnessPlan, DEFAULT_FITNESS_PROFILE } from '@/lib/fitness-plan';
-import { cn } from '@/lib/utils';
-import type { Goal } from '@/types';
 
-type Step = 'welcome' | 'name' | 'goal' | 'wakeTime' | 'done';
+type Step = 'welcome' | 'name' | 'wakeTime' | 'done';
 
 export default function OnboardingPage() {
   const { t } = useTranslation();
@@ -23,55 +18,7 @@ export default function OnboardingPage() {
 
   const [step, setStep] = useState<Step>('welcome');
   const [name, setName] = useState('');
-  const [goal, setGoal] = useState('');
   const [wakeTime, setWakeTime] = useState('09:00');
-
-  const seedOnboardingData = async (focus: string) => {
-    const [existingGoals, existingPlan] = await Promise.all([
-      db.goals.count(),
-      db.fitnessPlans.filter((plan) => plan.active).first(),
-    ]);
-
-    if (existingGoals === 0) {
-      const starterGoals: Goal[] = [];
-
-      if (focus === 'job' || focus === 'both') {
-        starterGoals.push({
-          id: uuidv4(),
-          text: 'Find a job',
-          horizon: '3months',
-          done: false,
-          createdAt: Date.now(),
-        });
-      }
-
-      if (focus === 'fitness' || focus === 'both') {
-        starterGoals.push({
-          id: uuidv4(),
-          text: 'Build a consistent fitness routine',
-          horizon: '3months',
-          done: false,
-          createdAt: Date.now(),
-        });
-      }
-
-      if (starterGoals.length > 0) {
-        await db.goals.bulkAdd(starterGoals);
-      }
-    }
-
-    if (!existingPlan && (focus === 'fitness' || focus === 'both')) {
-      const starterPlan = createFitnessPlan(
-        {
-          ...DEFAULT_FITNESS_PROFILE,
-          goal: focus === 'both' ? 'consistency' : 'energy',
-        },
-        'Starter 2 Weeks'
-      );
-
-      await db.fitnessPlans.add(starterPlan);
-    }
-  };
 
   useEffect(() => {
     if (hasHydrated) {
@@ -94,7 +41,6 @@ export default function OnboardingPage() {
   }, [hasHydrated, settings.onboardingDone, router]);
 
   const handleComplete = async () => {
-    await seedOnboardingData(goal);
     updateSettings({
       userName: name || 'friend',
       onboardingDone: true,
@@ -165,44 +111,12 @@ export default function OnboardingPage() {
                 color: 'var(--text)',
                 border: '1px solid var(--border)',
               }}
-              onKeyDown={(e) => e.key === 'Enter' && name.trim() && setStep('goal')}
+              onKeyDown={(e) => e.key === 'Enter' && name.trim() && setStep('wakeTime')}
               autoFocus
             />
-            <PrimaryButton onClick={() => setStep('goal')} disabled={!name.trim()}>
+            <PrimaryButton onClick={() => setStep('wakeTime')} disabled={!name.trim()}>
               {t('common.next')}
             </PrimaryButton>
-          </StepCard>
-        )}
-
-        {step === 'goal' && (
-          <StepCard>
-            {name && (
-              <p className="text-xs text-center mb-3" style={{ color: 'var(--accent)' }}>
-                {t('onboarding.nameConfirm', { name })}
-              </p>
-            )}
-            <p className="font-pixel text-[10px] mb-4 text-center" style={{ color: 'var(--text)' }}>
-              {t('onboarding.askGoal')}
-            </p>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              {(['job', 'fitness', 'both', 'other'] as const).map((g) => (
-                <button
-                  key={g}
-                  onClick={() => { setGoal(g); setStep('wakeTime'); }}
-                  className={cn(
-                    'py-3 px-2 rounded-xl text-xs font-pixel text-[8px] transition-all active:scale-95',
-                    goal === g ? 'ring-2 ring-offset-1' : ''
-                  )}
-                  style={{
-                    backgroundColor: 'var(--shell)',
-                    color: 'var(--text)',
-                    border: '1px solid var(--border)',
-                  }}
-                >
-                  {t(`onboarding.goals.${g}`)}
-                </button>
-              ))}
-            </div>
           </StepCard>
         )}
 
@@ -241,7 +155,7 @@ export default function OnboardingPage() {
 
       {/* Step indicators */}
       <div className="flex gap-2 mt-6">
-        {(['welcome', 'name', 'goal', 'wakeTime', 'done'] as Step[]).map((s, i) => (
+        {(['welcome', 'name', 'wakeTime', 'done'] as Step[]).map((s) => (
           <div
             key={s}
             className="w-2 h-2 rounded-full transition-all"
