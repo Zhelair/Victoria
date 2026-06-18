@@ -39,9 +39,38 @@ export default function HomePage() {
     () => db.fitnessPlans.filter((plan) => plan.active).first(),
     []
   );
+  const todayKey = useMemo(() => getTodayDateKey(), []);
+  const todayLog = useLiveQuery(
+    () => db.dailyLogs.where('date').equals(todayKey).first(),
+    [todayKey]
+  );
+  const todayEntries = useLiveQuery(
+    () => db.logEntries.where('date').equals(todayKey).toArray(),
+    [todayKey]
+  );
+  const daysLogged = useLiveQuery(
+    () => db.dailyLogs.count(),
+    []
+  );
   const quickActions = useMemo(
     () => getPinnedHomeRules(scoringRules),
     [scoringRules]
+  );
+  const companionOverview = useMemo(
+    () => buildCompanionOverview({
+      moodScore,
+      streakDays,
+      daysLogged: daysLogged ?? 0,
+      pendingTodos: pendingTodos ?? [],
+      activeGoals: activeGoals ?? [],
+      activePlan: activePlan ?? null,
+      todayLog: todayLog ? { checkinDone: todayLog.checkinDone } : null,
+      todayEntries: (todayEntries ?? []).map((entry) => ({
+        category: entry.category,
+        scoreDelta: entry.scoreDelta ?? 0,
+      })),
+    }),
+    [activeGoals, activePlan, daysLogged, moodScore, pendingTodos, streakDays, todayEntries, todayLog]
   );
 
   useEffect(() => {
@@ -275,6 +304,18 @@ export default function HomePage() {
           </div>
         )}
 
+        <CompanionOverviewCard
+          overview={companionOverview}
+          onFollowDirective={() => {
+            if (companionOverview.directive.route === '/chat') {
+              setActiveSphere('daily');
+            }
+            router.push(companionOverview.directive.route);
+          }}
+        />
+
+        <CareLoopBoard overview={companionOverview} />
+
         <PinnedRuleSection
           rules={quickActions}
           onAction={handleRuleAction}
@@ -283,6 +324,294 @@ export default function HomePage() {
         <TodayTasksWidget />
       </div>
     </AppShell>
+  );
+}
+
+type CompanionOverview = ReturnType<typeof buildCompanionOverview>;
+
+function clampStat(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function buildCompanionOverview({
+  moodScore,
+  streakDays,
+  daysLogged,
+  pendingTodos,
+  activeGoals,
+  activePlan,
+  todayLog,
+  todayEntries,
+}: {
+  moodScore: number;
+  streakDays: number;
+  daysLogged: number;
+  pendingTodos: Array<{ text: string }>;
+  activeGoals: Array<{ text: string }>;
+  activePlan: { title: string; days: Array<{ done: boolean; completedDate?: string; title?: string }> } | null;
+  todayLog: { checkinDone: boolean } | null;
+  todayEntries: Array<{ category: string; scoreDelta: number }>;
+}) {
+  const positiveEntries = todayEntries.filter((entry) => entry.scoreDelta > 0);
+  const hasFitnessPulse = positiveEntries.some((entry) => entry.category === 'fitness');
+  const hasCareerPulse = positiveEntries.some((entry) => entry.category === 'career');
+  const hasDailyPulse = Boolean(todayLog?.checkinDone) || positiveEntries.some((entry) => entry.category === 'daily');
+  const planProgressToday = Boolean(activePlan?.days?.some((day) => day.completedDate === getTodayDateKey()));
+  const topTodo = pendingTodos[0]?.text;
+
+  const level = Math.max(1, Math.floor((daysLogged * 3 + streakDays * 2 + positiveEntries.length) / 5) + 1);
+  const stage =
+    level >= 12 ? 'Guardian form' :
+    level >= 8 ? 'Focused form' :
+    level >= 4 ? 'Growing form' :
+    'Hatchling form';
+  const nextEvolutionLevel =
+    level < 4 ? 4 :
+    level < 8 ? 8 :
+    level < 12 ? 12 :
+    level + 4;
+
+  const bond = clampStat(moodScore * 0.6 + streakDays * 6 + (todayLog?.checkinDone ? 8 : 0));
+  const drive = clampStat(28 + positiveEntries.length * 16 + activeGoals.length * 6 - Math.max(0, pendingTodos.length - 3) * 5);
+  const rhythm = clampStat((activePlan ? 18 : 8) + (hasFitnessPulse || planProgressToday ? 32 : 0) + (hasDailyPulse ? 18 : 0) + streakDays * 4);
+
+  const quests = [
+    {
+      id: 'boot',
+      label: 'Boot',
+      done: Boolean(todayLog?.checkinDone),
+      hint: todayLog?.checkinDone ? 'Morning sync locked in.' : 'Run the morning briefing to anchor the day.',
+    },
+    {
+      id: 'body',
+      label: 'Body',
+      done: hasFitnessPulse || planProgressToday,
+      hint: hasFitnessPulse || planProgressToday
+        ? 'Body battery charged.'
+        : activePlan
+          ? 'Do your next plan block or at least a 10-minute walk.'
+          : 'Take a short walk, stretch, or quick mobility round.',
+    },
+    {
+      id: 'focus',
+      label: 'Focus',
+      done: hasCareerPulse,
+      hint: hasCareerPulse
+        ? 'Real-world momentum confirmed.'
+        : 'Ship one useful action on work, admin, or learning.',
+    },
+    {
+      id: 'clear',
+      label: 'Clear',
+      done: positiveEntries.length >= 2 || pendingTodos.length <= 2,
+      hint: positiveEntries.length >= 2 || pendingTodos.length <= 2
+        ? 'Backlog pressure is under control.'
+        : topTodo
+          ? `Clear this tile: ${topTodo}`
+          : 'Add one tiny mission and finish it fast.',
+    },
+  ];
+
+  const firstUndone = quests.find((quest) => !quest.done);
+  const directive = !firstUndone
+    ? {
+        label: 'Companion stable',
+        text: 'Your systems are online. Use chat to reflect, plan the next quest, or push for a bigger move.',
+        cta: 'Open chat',
+        route: '/chat' as const,
+      }
+    : firstUndone.id === 'body'
+      ? {
+          label: 'Body battery low',
+          text: activePlan
+            ? `Victoria wants movement. Open ${activePlan.title} and knock out the next block.`
+            : 'Victoria wants movement. Open Plans and queue a simple body mission.',
+          cta: 'Open plans',
+          route: '/plans' as const,
+        }
+      : firstUndone.id === 'focus'
+        ? {
+            label: 'Focus window open',
+            text: activeGoals[0]?.text
+              ? `Push ${activeGoals[0].text} forward with one non-negotiable action.`
+              : 'Use chat to turn today into one concrete objective.',
+            cta: activeGoals[0]?.text ? 'Open chat' : 'Open chat',
+            route: '/chat' as const,
+          }
+        : firstUndone.id === 'clear'
+          ? {
+              label: 'Clutter spike detected',
+              text: topTodo
+                ? `Clear ${topTodo} to calm the board and lift Victoria's mood.`
+                : 'Open Plans and add one fast, winnable mission.',
+              cta: 'Open plans',
+              route: '/plans' as const,
+            }
+          : {
+              label: 'Morning handshake missing',
+              text: 'Open the briefing or start chat with Victoria so the day begins intentionally.',
+              cta: 'Open chat',
+              route: '/chat' as const,
+            };
+
+  return {
+    level,
+    stage,
+    nextEvolutionLevel,
+    bond,
+    drive,
+    rhythm,
+    quests,
+    directive,
+    completedQuests: quests.filter((quest) => quest.done).length,
+    daysLogged,
+  };
+}
+
+function CompanionOverviewCard({
+  overview,
+  onFollowDirective,
+}: {
+  overview: CompanionOverview;
+  onFollowDirective: () => void;
+}) {
+  return (
+    <div className="console-panel p-4 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-pixel text-[7px]" style={{ color: 'var(--accent)' }}>
+            COMPANION OS
+          </p>
+          <h3 className="font-pixel text-[9px] mt-2" style={{ color: 'var(--text)' }}>
+            {overview.stage}
+          </h3>
+          <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+            Level {overview.level} · {overview.daysLogged} logged day{overview.daysLogged === 1 ? '' : 's'}
+          </p>
+        </div>
+        <div
+          className="rounded-2xl px-3 py-2 text-right"
+          style={{ backgroundColor: 'rgba(255,255,255,0.52)', border: '1px solid var(--border)' }}
+        >
+          <p className="font-pixel text-[6px]" style={{ color: 'var(--text-muted)' }}>
+            NEXT FORM
+          </p>
+          <p className="font-pixel text-[8px] mt-1" style={{ color: 'var(--accent)' }}>
+            LV {overview.nextEvolutionLevel}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <ConsoleMeter label="Bond" value={overview.bond} color="#4d7c5f" />
+        <ConsoleMeter label="Drive" value={overview.drive} color="#e49c35" />
+        <ConsoleMeter label="Rhythm" value={overview.rhythm} color="#6e7f2c" />
+      </div>
+
+      <div className="console-inset p-3 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-pixel text-[7px]" style={{ color: 'var(--accent)' }}>
+              NEXT MOVE
+            </p>
+            <p className="text-sm mt-2" style={{ color: 'var(--text)' }}>
+              {overview.directive.label}
+            </p>
+            <p className="text-xs mt-2 leading-relaxed" style={{ color: 'var(--text-muted)' }}>
+              {overview.directive.text}
+            </p>
+          </div>
+          <button
+            onClick={onFollowDirective}
+            className="px-3 py-2 rounded-2xl font-pixel text-[7px] text-white transition-all active:scale-95"
+            style={{ backgroundColor: 'var(--accent)' }}
+          >
+            {overview.directive.cta}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CareLoopBoard({ overview }: { overview: CompanionOverview }) {
+  return (
+    <div className="console-panel p-4 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-pixel text-[7px]" style={{ color: 'var(--accent)' }}>
+            CARE LOOP
+          </p>
+          <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+            {overview.completedQuests}/4 systems online today
+          </p>
+        </div>
+        <div
+          className="px-3 py-2 rounded-2xl font-pixel text-[7px]"
+          style={{ backgroundColor: 'rgba(255,255,255,0.5)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+        >
+          DAILY BOARD
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {overview.quests.map((quest) => (
+          <div
+            key={quest.id}
+            className="rounded-2xl p-3 space-y-2"
+            style={{
+              backgroundColor: quest.done ? 'rgba(77, 124, 95, 0.12)' : 'rgba(255,255,255,0.56)',
+              border: `1px solid ${quest.done ? 'rgba(77, 124, 95, 0.3)' : 'rgba(128, 103, 46, 0.18)'}`,
+            }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-pixel text-[7px]" style={{ color: quest.done ? 'var(--accent)' : 'var(--text-muted)' }}>
+                {quest.label}
+              </p>
+              <span className="font-pixel text-[6px]" style={{ color: quest.done ? '#15803d' : '#a16207' }}>
+                {quest.done ? 'DONE' : 'PENDING'}
+              </span>
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--text)' }}>
+              {quest.hint}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ConsoleMeter({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
+  return (
+    <div
+      className="rounded-2xl px-3 py-3"
+      style={{ backgroundColor: 'rgba(255,255,255,0.52)', border: '1px solid var(--border)' }}
+    >
+      <p className="font-pixel text-[6px]" style={{ color: 'var(--text-muted)' }}>
+        {label}
+      </p>
+      <p className="font-pixel text-[8px] mt-2" style={{ color: 'var(--text)' }}>
+        {value}
+      </p>
+      <div
+        className="mt-2 h-2 rounded-full overflow-hidden"
+        style={{ backgroundColor: 'rgba(15, 56, 15, 0.12)' }}
+      >
+        <div
+          className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${value}%`, backgroundColor: color }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -295,7 +624,7 @@ function PinnedRuleSection({
 }) {
   if (rules.length === 0) {
     return (
-      <div className="card p-3">
+      <div className="console-panel p-3">
         <h3 className="font-pixel text-[8px] mb-2" style={{ color: 'var(--accent)' }}>
           Quick Actions
         </h3>
@@ -307,7 +636,7 @@ function PinnedRuleSection({
   }
 
   return (
-    <div className="card p-3">
+    <div className="console-panel p-3">
       <h3 className="font-pixel text-[8px] mb-3" style={{ color: 'var(--accent)' }}>
         Quick Actions
       </h3>
@@ -351,7 +680,7 @@ function TodayTasksWidget() {
   const remaining = Math.max(0, (todos?.length ?? 0) - preview.length);
 
   return (
-    <div className="card p-3 mb-4">
+    <div className="console-panel p-3 mb-4">
       <h3 className="font-pixel text-[8px] mb-2" style={{ color: 'var(--text-muted)' }}>
         {t('home.todayTasks')}
       </h3>

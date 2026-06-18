@@ -27,32 +27,36 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex flex-col min-h-screen max-w-md mx-auto relative">
-      {/* Top bar */}
-      <header className="flex items-center justify-between px-4 py-3 bg-card border-b border-theme sticky top-0 z-40">
-        <div className="flex items-center gap-2">
-          <span className="font-pixel text-xs" style={{ color: 'var(--accent)' }}>
-            VICTORIA
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <MoodBadge tier={moodTier} score={moodScore} />
-          <Link
-            href="/settings"
-            className="p-1.5 rounded-lg hover:bg-shell transition-colors"
-            aria-label="Settings"
-          >
-            <SettingsIcon className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
-          </Link>
-        </div>
-      </header>
+    <div className="app-device">
+      <div className="app-shell-console flex flex-col max-w-md mx-auto relative">
+        <header className="console-header sticky top-0 z-40 px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-pixel text-xs" style={{ color: 'var(--accent)' }}>
+                VICTORIA
+              </p>
+              <p className="font-pixel text-[6px] mt-1" style={{ color: 'var(--text-muted)' }}>
+                POCKET LIFE COMPANION
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <MoodBadge tier={moodTier} score={moodScore} />
+              <Link
+                href="/settings"
+                className="p-2 rounded-xl transition-colors"
+                style={{ backgroundColor: 'rgba(232, 213, 163, 0.72)', border: '1px solid var(--border)' }}
+                aria-label="Settings"
+              >
+                <SettingsIcon className="w-4 h-4" style={{ color: 'var(--text-muted)' }} />
+              </Link>
+            </div>
+          </div>
+        </header>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-y-auto pb-20">{children}</main>
+        <main className="flex-1 overflow-y-auto pb-28">{children}</main>
 
-      {/* Bottom navigation */}
-      <nav className="bottom-nav fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-40">
-        <div className="flex items-center justify-around px-2 py-2">
+        <nav className="bottom-nav fixed bottom-3 left-1/2 -translate-x-1/2 w-[calc(100%-20px)] max-w-[390px] z-40 rounded-[28px]">
+          <div className="flex items-center justify-around px-2 py-2">
           {NAV_ITEMS.map(({ href, labelKey, icon: Icon }) => {
             const isActive = pathname === href || (href !== '/' && pathname.startsWith(href));
             return (
@@ -60,20 +64,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={href}
                 href={href}
                 className={cn(
-                  'flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all',
+                  'flex flex-col items-center gap-1 px-3 py-2 rounded-2xl transition-all',
                   isActive
-                    ? 'bg-accent text-white scale-105'
-                    : 'text-muted hover:text-text hover:bg-shell'
+                    ? 'text-white scale-105'
+                    : 'text-muted hover:text-text'
                 )}
-                style={isActive ? { backgroundColor: 'var(--accent)', color: 'white' } : {}}
+                style={
+                  isActive
+                    ? {
+                        backgroundColor: 'var(--accent)',
+                        color: 'white',
+                        boxShadow: '0 8px 20px rgba(77, 124, 95, 0.24)',
+                      }
+                    : {
+                        backgroundColor: 'rgba(255,255,255,0.34)',
+                      }
+                }
               >
                 <Icon className="w-5 h-5" />
                 <span className="font-pixel text-[7px] leading-none">{t(labelKey)}</span>
               </Link>
             );
           })}
-        </div>
-      </nav>
+          </div>
+        </nav>
+      </div>
     </div>
   );
 }
