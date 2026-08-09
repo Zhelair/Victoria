@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { saveSettings } from '@/lib/db';
 import { getTodayDateKey } from '@/lib/utils';
+import { LEGACY_DEFAULT_RULE_IDS, PLANNER_SCORING_RULES } from '@/lib/life-plan';
 import type {
   AppSettings,
   ScoringRule,
@@ -12,22 +13,21 @@ import type {
 } from '@/types';
 import {
   DEFAULT_SETTINGS,
-  DEFAULT_SCORING_RULES,
   DEFAULT_LOG_CATEGORIES,
   getMoodTier,
 } from '@/types';
 
 function mergeScoringRules(rules?: ScoringRule[]) {
-  if (!rules?.length) return DEFAULT_SCORING_RULES;
+  if (!rules?.length) return PLANNER_SCORING_RULES;
 
-  const defaultsById = new Map(DEFAULT_SCORING_RULES.map((rule) => [rule.id, rule]));
-  const merged = rules.map((rule) => {
+  const defaultsById = new Map(PLANNER_SCORING_RULES.map((rule) => [rule.id, rule]));
+  const merged = rules.filter((rule) => !LEGACY_DEFAULT_RULE_IDS.has(rule.id)).map((rule) => {
     const defaultRule = defaultsById.get(rule.id);
     return defaultRule ? { ...defaultRule, ...rule } : rule;
   });
 
   const existingIds = new Set(merged.map((rule) => rule.id));
-  const missingDefaults = DEFAULT_SCORING_RULES.filter((rule) => !existingIds.has(rule.id));
+  const missingDefaults = PLANNER_SCORING_RULES.filter((rule) => !existingIds.has(rule.id));
 
   return [...merged, ...missingDefaults];
 }
@@ -152,7 +152,7 @@ export const useVictoriaStore = create<VictoriaState>()(
           moodScore: Math.max(0, Math.min(100, s.moodScore + delta)),
         })),
 
-      scoringRules: DEFAULT_SCORING_RULES,
+      scoringRules: PLANNER_SCORING_RULES,
       setScoringRules: (rules) => set({ scoringRules: rules }),
       addScoringRule: (rule) =>
         set((s) => ({ scoringRules: [...s.scoringRules, rule] })),

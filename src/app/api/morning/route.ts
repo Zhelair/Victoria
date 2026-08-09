@@ -135,20 +135,21 @@ export async function POST(req: NextRequest) {
         planDay,
         streakDays,
         weather: liveData.weather,
-        event: liveData.event,
+        event: null,
         newsEnabled,
         newsTopics,
       }),
       weather: liveData.weather,
-      event: liveData.event,
+      event: null,
       generatedWithAI: false,
     };
 
     const apiKey = process.env.DEEPSEEK_API_KEY;
-    if (!apiKey) {
+    // Morning briefings stay local and predictable. Chat remains the optional AI surface.
+    const useAiBriefing = false;
+    if (!apiKey || !useAiBriefing) {
       return Response.json(fallbackPayload);
     }
-
     const systemPrompt = [
       'You are Victoria, a supportive but honest morning companion.',
       `Personality mode: ${personality}. Mood tier: ${moodTier}.`,
@@ -164,7 +165,7 @@ export async function POST(req: NextRequest) {
       `Local app context: tasks ${safeTopTodos.length > 0 ? safeTopTodos.join(', ') : 'none saved'}; goals ${safeTopGoals.length > 0 ? safeTopGoals.join(', ') : 'none saved'}; active plan ${planTitle && planDay ? `${planTitle} day ${planDay}` : 'none'}; streak ${streakDays}.`,
       `Morning preferences: location ${location || 'not set'}; weather ${weatherEnabled ? 'wanted' : 'off'}; fact categories ${factCategories || 'general'}; news ${newsEnabled ? `wanted for ${newsTopics || 'general topics'}` : 'off'}.`,
       `Live weather: ${formatWeather(liveData.weather)}`,
-      `Live history item: ${formatEvent(liveData.event)}`,
+      'Do not use historical events or negative news in a morning briefing.',
     ].join('\n');
 
     const response = await fetch(DEEPSEEK_API_URL, {
@@ -201,7 +202,7 @@ export async function POST(req: NextRequest) {
     return Response.json({
       briefing,
       weather: liveData.weather,
-      event: liveData.event,
+      event: null,
       generatedWithAI: true,
     });
   } catch (error) {

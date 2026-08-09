@@ -19,7 +19,6 @@ export interface MorningHistoryEvent {
 
 export interface MorningLiveData {
   weather: MorningWeather | null;
-  event: MorningHistoryEvent | null;
 }
 
 interface GeocodeResult {
@@ -243,13 +242,6 @@ export async function fetchMorningLiveData({
   location: string;
   includeWeather: boolean;
 }) {
-  const [weather, event] = await Promise.all([
-    includeWeather ? fetchMorningWeather(location) : Promise.resolve(null),
-    fetchMorningHistoryEvent(),
-  ]);
-
-  return {
-    weather,
-    event,
-  } satisfies MorningLiveData;
+  const weather = includeWeather ? await fetchMorningWeather(location) : null;
+  return { weather } satisfies MorningLiveData;
 }
