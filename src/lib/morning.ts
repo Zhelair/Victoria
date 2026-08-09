@@ -1,15 +1,15 @@
 const FACT_BANK: Record<string, string[]> = {
   science: [
-    'A day on Venus is longer than its year.',
     'Your body makes millions of new cells every second.',
-    'Octopuses have three hearts and blue blood.',
-    'Bananas are naturally slightly radioactive because of potassium.',
+    'A short walk can improve attention and make the next task easier to begin.',
+    'Sleep helps the brain consolidate useful memories from the day before.',
+    'Trees and plants release oxygen through photosynthesis, quietly sustaining life every day.',
   ],
   history: [
-    'The Great Library of Alexandria was one of the most famous learning centers of the ancient world.',
-    'Coffee first became popular in the Middle East before spreading across Europe.',
-    'Ancient Roman concrete was durable enough that some structures still stand today.',
-    'The printing press dramatically accelerated the spread of ideas across Europe.',
+    'The printing press helped knowledge travel farther and reach more people.',
+    'Libraries have connected people with ideas and each other for centuries.',
+    'Many historic cities were built through the patient work of ordinary craftspeople.',
+    'Music, art and writing have helped communities preserve meaning across generations.',
   ],
   ai: [
     'The phrase "artificial intelligence" was popularized in the 1950s.',
@@ -59,7 +59,7 @@ export function getMorningSpark(categoriesRaw: string) {
   const seed = getDaySeed();
   const category = pool[seed % pool.length];
   const facts = FACT_BANK[category] ?? FACT_BANK.general;
-  const label = seed % 2 === 0 ? 'Fact of the day' : 'Morning note';
+  const label = seed % 2 === 0 ? 'A good thing to remember' : 'Morning note';
   const text =
     seed % 2 === 0
       ? facts[Math.floor(seed / pool.length) % facts.length]

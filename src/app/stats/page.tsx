@@ -10,6 +10,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { useVictoriaStore } from '@/store';
 import { db, getMoodScoreHistory } from '@/lib/db';
 import { getDateKeyDaysAgo } from '@/lib/utils';
+import { getPillarForRule, LIFE_PILLARS } from '@/lib/life-plan';
 
 
 type Range = 7 | 30 | 90;
@@ -20,6 +21,7 @@ export default function StatsPage() {
   const [range, setRange] = useState<Range>(7);
   const [moodHistory, setMoodHistory] = useState<{ date: string; score: number }[]>([]);
   const [categoryData, setCategoryData] = useState<Record<string, { date: string; value: number }[]>>({});
+  const [pillarCounts, setPillarCounts] = useState<Record<string, number>>({});
   const logCategories = useVictoriaStore((s) => s.logCategories);
   const streakDays = useVictoriaStore((s) => s.streakDays);
   const totalDays = useVictoriaStore((s) => s.totalDays);
@@ -52,12 +54,18 @@ export default function StatsPage() {
       grouped[entry.category].push({ date: entry.date, value: val });
     }
     setCategoryData(grouped);
+
+    const nextPillarCounts = Object.fromEntries(LIFE_PILLARS.map((pillar) => [pillar.id, 0]));
+    for (const entry of entries) {
+      const pillarId = entry.ruleId ? getPillarForRule(entry.ruleId) : null;
+      if (pillarId) nextPillarCounts[pillarId] += 1;
+    }
+    setPillarCounts(nextPillarCounts);
   };
 
   const numericCategories = logCategories.filter(
     (c) => c.enabled && (c.type === 'number' || c.type === 'scale') && categoryData[c.id]?.length > 0
   );
-
   const formatDate = (date: string) => {
     const d = new Date(date);
     return `${d.getMonth() + 1}/${d.getDate()}`;
@@ -94,6 +102,35 @@ export default function StatsPage() {
           <StatCard label="Current Score" value={moodScore} unit="pts" color="var(--accent)" />
           <StatCard label="Streak" value={streakDays} unit="days" color="#f59e0b" />
           <StatCard label="Total Days" value={totalDays} unit="days" color="#22c55e" />
+        </div>
+
+        <div className="card p-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h3 className="font-pixel text-[8px]" style={{ color: 'var(--text-muted)' }}>
+              FIVE-PILLAR RHYTHM
+            </h3>
+            <span className="font-pixel text-[6px]" style={{ color: 'var(--accent)' }}>{range} days</span>
+          </div>
+          <div className="space-y-3">
+            {LIFE_PILLARS.map((pillar) => {
+              const count = pillarCounts[pillar.id] ?? 0;
+              const width = Math.min(100, count * 20);
+              return (
+                <div key={pillar.id}>
+                  <div className="flex items-center justify-between gap-3 text-xs" style={{ color: 'var(--text)' }}>
+                    <span>{pillar.icon} {pillar.shortLabel}</span>
+                    <span className="font-pixel text-[7px]" style={{ color: pillar.color }}>{count} wins</span>
+                  </div>
+                  <div className="mt-1.5 h-2 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--shell)' }}>
+                    <div className="h-full rounded-full" style={{ width: `${width}%`, backgroundColor: pillar.color }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[11px] leading-relaxed mt-4" style={{ color: 'var(--text-muted)' }}>
+            These are planner actions logged in Victoria—not generic habit points.
+          </p>
         </div>
 
         {/* Mood history chart */}

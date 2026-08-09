@@ -22,7 +22,8 @@ import {
   REMINDER_REPEAT_OPTIONS,
   REMINDER_SOUND_OPTIONS,
 } from '@/lib/reminders';
-import { cn, getTodayDateKey } from '@/lib/utils';
+import { cn, formatDate, getTodayDateKey } from '@/lib/utils';
+import { getCurrentQuarter, getPillarForRule, LIFE_PILLARS } from '@/lib/life-plan';
 import { useVictoriaStore } from '@/store';
 import type {
   FitnessDay,
@@ -37,12 +38,12 @@ import type {
 
 export default function PlansPage() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'fitness' | 'todos' | 'goals' | 'reminders'>('fitness');
+  const [activeTab, setActiveTab] = useState<'life' | 'fitness' | 'todos' | 'goals' | 'reminders'>('life');
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const nextTab = new URLSearchParams(window.location.search).get('tab');
-    if (nextTab === 'fitness' || nextTab === 'todos' || nextTab === 'goals' || nextTab === 'reminders') {
+    if (nextTab === 'life' || nextTab === 'fitness' || nextTab === 'todos' || nextTab === 'goals' || nextTab === 'reminders') {
       setActiveTab(nextTab);
     }
   }, []);
@@ -54,7 +55,7 @@ export default function PlansPage() {
           className="flex border-b border-theme px-3 pt-3"
           style={{ backgroundColor: 'var(--card-bg)' }}
         >
-          {(['fitness', 'todos', 'goals', 'reminders'] as const).map((tab) => (
+          {(['life', 'fitness', 'todos', 'goals', 'reminders'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -67,7 +68,9 @@ export default function PlansPage() {
                 borderColor: activeTab === tab ? 'var(--accent)' : 'transparent',
               }}
             >
-              {tab === 'fitness'
+              {tab === 'life'
+                ? 'My plan'
+                : tab === 'fitness'
                 ? t('plans.fitnessPlan')
                 : tab === 'todos'
                   ? t('plans.todos')
@@ -79,6 +82,7 @@ export default function PlansPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
+          {activeTab === 'life' && <LifePlanTab />}
           {activeTab === 'fitness' && <FitnessTab />}
           {activeTab === 'todos' && <TodosTab />}
           {activeTab === 'goals' && <GoalsTab />}
@@ -87,6 +91,87 @@ export default function PlansPage() {
       </div>
     </AppShell>
   );
+}
+
+function LifePlanTab() {
+  const weekStart = useMemo(() => {
+    const date = new Date();
+    const weekday = date.getDay() || 7;
+    date.setDate(date.getDate() - weekday + 1);
+    return formatDate(date);
+  }, []);
+  const weeklyEntries = useLiveQuery(
+    () => db.logEntries.where('date').aboveOrEqual(weekStart).toArray(),
+    [weekStart]
+  );
+  const currentQuarter = getCurrentQuarter();
+  const completedRuleIds = new Set((weeklyEntries ?? []).map((entry) => entry.ruleId).filter(Boolean));
+  const pillarProgress = LIFE_PILLARS.map((pillar) => {
+    const relevant = (weeklyEntries ?? []).filter((entry) => entry.ruleId && getPillarForRule(entry.ruleId) === pillar.id);
+    return { pillar, count: relevant.length };
+  });
+
+  return (
+    <div className="space-y-4">
+      <section className="card p-4" style={{ borderColor: 'var(--accent)' }}>
+        <p className="font-pixel text-[7px]" style={{ color: 'var(--accent)' }}>ONE-YEAR LIFE PLAN</p>
+        <h2 className="font-pixel text-[10px] mt-2" style={{ color: 'var(--text)' }}>Build the basics. Keep the direction.</h2>
+        <p className="text-xs leading-relaxed mt-3" style={{ color: 'var(--text-muted)' }}>
+          This week is about calm, strong, prosperous consistency—not doing everything at once.
+        </p>
+      </section>
+
+      <section className="card p-4 space-y-3">
+        <div>
+          <p className="font-pixel text-[7px]" style={{ color: 'var(--accent)' }}>CURRENT DIRECTION</p>
+          <h3 className="font-pixel text-[9px] mt-2" style={{ color: 'var(--text)' }}>{currentQuarter.label}</h3>
+        </div>
+        <PlanLine icon="💼" label="Career" text={currentQuarter.career} />
+        <PlanLine icon="🤝" label="Relationships" text={currentQuarter.relationships} />
+        <PlanLine icon="🌿" label="Health & spirit" text={currentQuarter.health} />
+        <PlanLine icon="💰" label="Money" text={currentQuarter.money} />
+      </section>
+
+      <section className="card p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <p className="font-pixel text-[8px]" style={{ color: 'var(--text)' }}>THIS WEEK&apos;S FOUNDATION</p>
+          <span className="font-pixel text-[6px]" style={{ color: 'var(--text-muted)' }}>since {weekStart}</span>
+        </div>
+        <div className="space-y-3">
+          {pillarProgress.map(({ pillar, count }) => (
+            <div key={pillar.id} className="rounded-xl px-3 py-2" style={{ backgroundColor: 'var(--shell)' }}>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs" style={{ color: 'var(--text)' }}>{pillar.icon} {pillar.shortLabel}</span>
+                <span className="font-pixel text-[7px]" style={{ color: pillar.color }}>{count} logged</span>
+              </div>
+              <p className="text-[11px] mt-1 leading-relaxed" style={{ color: 'var(--text-muted)' }}>{pillar.yearlyFocus}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="card p-4">
+        <p className="font-pixel text-[8px] mb-3" style={{ color: 'var(--text)' }}>WEEKLY CHECK-IN</p>
+        <div className="space-y-2 text-xs" style={{ color: 'var(--text-muted)' }}>
+          <CheckLine done={completedRuleIds.has('morning_practice')} text="Morning practice — protect the first hour." />
+          <CheckLine done={completedRuleIds.has('stronger_workout')} text="Stronger workouts — aim for two this week." />
+          <CheckLine done={completedRuleIds.has('sobriety_protected')} text="Sobriety — protect it today." />
+          <CheckLine done={completedRuleIds.has('career_learning')} text="Career learning or one useful improvement." />
+          <CheckLine done={completedRuleIds.has('social_culture')} text="Dating, friendship or one cultural action." />
+          <CheckLine done={completedRuleIds.has('meditation_practice')} text="Meditation / HORA / practice." />
+          <CheckLine done={completedRuleIds.has('weekly_review')} text="Weekly review — awareness, not judgment." />
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PlanLine({ icon, label, text }: { icon: string; label: string; text: string }) {
+  return <p className="text-xs leading-relaxed" style={{ color: 'var(--text-muted)' }}><span style={{ color: 'var(--text)' }}>{icon} {label}:</span> {text}</p>;
+}
+
+function CheckLine({ done, text }: { done: boolean; text: string }) {
+  return <p style={{ color: done ? 'var(--text)' : 'var(--text-muted)' }}>{done ? '✓' : '○'} {text}</p>;
 }
 
 function FitnessTab() {

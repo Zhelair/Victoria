@@ -11,7 +11,7 @@ import { getTodayDateKey, pickRandom } from '@/lib/utils';
 import { getActivePlanDayNumber, getMorningSpark } from '@/lib/morning';
 import { applyScoringRule, getPinnedHomeRules, getRuleScoreDelta } from '@/lib/scoring';
 import { DEFAULT_SETTINGS, getMoodTier } from '@/types';
-import { db, markDailyCheckin } from '@/lib/db';
+import { db } from '@/lib/db';
 
 export default function HomePage() {
   const router = useRouter();
@@ -783,13 +783,8 @@ function MorningBriefingCard({
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const wakeMinutes =
     (Number.isFinite(wakeHour) ? wakeHour : 9) * 60 + (Number.isFinite(wakeMinute) ? wakeMinute : 0);
-  const isMorningWindow = currentMinutes >= wakeMinutes && currentMinutes <= wakeMinutes + 6 * 60;
+  const isMorningWindow = currentMinutes >= wakeMinutes && currentMinutes <= wakeMinutes + 90;
   const isVisible = settings.morningBriefingEnabled && (forceOpen || isMorningWindow) && (!dismissed || forceOpen);
-
-  useEffect(() => {
-    if (!isVisible) return;
-    void markDailyCheckin(todayStamp, true);
-  }, [isVisible, todayStamp]);
 
   const topTodos = useMemo(
     () => (Array.isArray(pendingTodos) ? pendingTodos.slice(0, 3) : []),
@@ -1035,11 +1030,6 @@ function MorningBriefingCard({
         {weatherSummary && (
           <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
             Weather: {weatherSummary}
-          </p>
-        )}
-        {liveBriefing?.event && (
-          <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
-            On this day: {liveBriefing.event.year} - {liveBriefing.event.text}
           </p>
         )}
         <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>
