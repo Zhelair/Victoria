@@ -29,13 +29,13 @@ export const QUARTERLY_DIRECTION = [
 export const PLANNER_SCORING_RULES: ScoringRule[] = [
   { id: 'morning_practice', label: 'Completed morning practice', emoji: '☀️', type: 'heal', points: 6, enabled: true, category: 'daily', pinnedToHome: true, triggerPhrases: ['morning practice', 'morning routine', 'morning stretch'] },
   { id: 'stronger_workout', label: 'Completed a stronger workout', emoji: '💪', type: 'heal', points: 12, enabled: true, category: 'fitness', pinnedToHome: true, triggerPhrases: ['stronger workout', 'trained today', 'worked out', 'did a workout'] },
-  { id: 'daily_movement', label: 'Walked or moved with intention', emoji: '🚶', type: 'heal', points: 5, enabled: true, category: 'fitness', pinnedToHome: true, triggerPhrases: ['went for a walk', 'walked', 'daily movement'] },
+  { id: 'daily_movement', label: 'Walked or moved with intention', emoji: '🚶', type: 'heal', points: 5, enabled: true, category: 'fitness', triggerPhrases: ['went for a walk', 'walked', 'daily movement'] },
   { id: 'sobriety_protected', label: 'Protected sobriety today', emoji: '🛡️', type: 'heal', points: 10, enabled: true, category: 'daily', pinnedToHome: true, triggerPhrases: ['stayed sober', 'no alcohol today', 'protected sobriety'] },
   { id: 'career_learning', label: 'Career learning or improvement', emoji: '📚', type: 'heal', points: 10, enabled: true, category: 'career', pinnedToHome: true, triggerPhrases: ['career learning', 'learned at work', 'work improvement'] },
-  { id: 'social_culture', label: 'Social, dating or cultural action', emoji: '🤝', type: 'heal', points: 10, enabled: true, category: 'social', pinnedToHome: true, triggerPhrases: ['met a friend', 'went on a date', 'social action', 'cultural action'] },
+  { id: 'social_culture', label: 'Social, dating or cultural action', emoji: '🤝', type: 'heal', points: 10, enabled: true, category: 'social', triggerPhrases: ['met a friend', 'went on a date', 'social action', 'cultural action'] },
   { id: 'meditation_practice', label: 'Meditation or spiritual practice', emoji: '🧘', type: 'heal', points: 7, enabled: true, category: 'daily', pinnedToHome: true, triggerPhrases: ['meditated', 'meditation', 'spiritual practice'] },
   { id: 'money_check', label: 'Completed money check', emoji: '💰', type: 'heal', points: 6, enabled: true, category: 'career', triggerPhrases: ['money check', 'checked my money', 'budget review'] },
-  { id: 'weekly_review', label: 'Completed weekly review', emoji: '🗓️', type: 'heal', points: 12, enabled: true, category: 'daily', pinnedToHome: true, triggerPhrases: ['weekly review', 'reviewed my week'] },
+  { id: 'weekly_review', label: 'Completed weekly review', emoji: '🗓️', type: 'heal', points: 12, enabled: true, category: 'daily', triggerPhrases: ['weekly review', 'reviewed my week'] },
   { id: 'evening_reset', label: 'Completed evening reset', emoji: '🌙', type: 'heal', points: 5, enabled: true, category: 'daily', triggerPhrases: ['evening reset', 'tidied home', 'read and reflected'] },
 ];
 
